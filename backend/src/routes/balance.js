@@ -1,3 +1,13 @@
+/**
+ * File: balance.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Account balance routes. Returns the authenticated user's cash balance,
+ *   frozen cash, total market value of positions, total assets, and profit/loss.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const express = require('express')
 const { UserBalance, Position, Group, sequelize } = require('../models')
 const { Op } = require('sequelize')
@@ -7,6 +17,12 @@ const { toCNY } = require('../utils/currency')
 
 const router = express.Router()
 
+/**
+ * GET /api/v1/balance
+ * Get the authenticated user's account balance, including cash, frozen cash, total
+ * market value of positions, total assets, and overall profit/loss.
+ * Response: { code, data: { initCash, cash, frozenCash, totalMarketValue, totalAssets, profit, profitRate } }
+ */
 router.get('/', auth, async (req, res) => {
   try {
     const balance = await UserBalance.findOne({ where: { user_id: req.userId } })

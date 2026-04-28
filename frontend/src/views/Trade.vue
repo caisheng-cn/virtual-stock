@@ -127,6 +127,16 @@
 </template>
 
 <script setup>
+/**
+ * File: Trade.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Stock trading page with market tabs (A/HK/US), stock list with search
+ *   and pagination, K-line chart using lightweight-charts, stock quote info, and
+ *   buy/sell form with commission calculation.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createChart } from 'lightweight-charts'
@@ -182,6 +192,12 @@ const currencySymbol = computed(() => CURRENCY_SYMBOL[marketType.value] || 'RMB'
 const commissionConfigs = ref({})
 const commissionConfigsLoaded = ref(false)
 
+/**
+ * loadCommissionConfigs
+ * Description: Fetches commission rate configurations from the API and builds
+ *   a lookup map keyed by market_type and trade_type.
+ * @returns {Promise<void>}
+ */
 async function loadCommissionConfigs() {
   try {
     const configs = await getCommissionConfigs()
@@ -197,6 +213,13 @@ async function loadCommissionConfigs() {
   }
 }
 
+/**
+ * getRate
+ * Description: Retrieves the commission rate for a given market and trade type.
+ * @param {number} marketType - The market type (1=A, 2=HK, 3=US)
+ * @param {number} tradeType - The trade type (1=buy, 2=sell)
+ * @returns {number} The commission rate in per-mille
+ */
 const getRate = (marketType, tradeType) => {
   const key = `${marketType}_${tradeType}`
   return commissionConfigs.value[key] ?? 0.5
@@ -226,6 +249,12 @@ const commissionRateDisplay = computed(() => {
   return rate.toFixed(1) + '‰'
 })
 
+/**
+ * formatMoney
+ * Description: Formats a numeric value as a comma-separated string with two decimal places.
+ * @param {number} value - The numeric value to format
+ * @returns {string} The formatted money string
+ */
 const formatMoney = (value) => {
   if (!value && value !== 0) return '0.00'
   return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
@@ -245,6 +274,11 @@ onUnmounted(() => {
   }
 })
 
+/**
+ * handleResize
+ * Description: Resizes the lightweight-charts chart when the browser window is resized.
+ * @returns {void}
+ */
 const handleResize = () => {
   if (chart && chartContainer.value) {
     chart.applyOptions({
@@ -255,6 +289,12 @@ const handleResize = () => {
   }
 }
 
+/**
+ * initChart
+ * Description: Initializes the lightweight-charts candlestick and volume series
+ *   within the chart container element. Destroys any previous chart instance first.
+ * @returns {Promise<void>}
+ */
 const initChart = async () => {
   await nextTick()
 
@@ -329,6 +369,12 @@ const initChart = async () => {
   }
 }
 
+/**
+ * fetchStockHistory
+ * Description: Fetches historical K-line data for the selected stock and renders
+ *   it on the chart. Supports day/week/month aggregation.
+ * @returns {Promise<void>}
+ */
 const fetchStockHistory = async () => {
   if (!chart) return
 
@@ -420,6 +466,12 @@ klineLoading.value = false
   }
 }
 
+/**
+ * convertToWeekly
+ * Description: Aggregates daily K-line data into weekly bars by grouping on ISO week number.
+ * @param {Array} data - Array of daily K-line data objects
+ * @returns {Array} Array of weekly aggregated data objects
+ */
 const convertToWeekly = (data) => {
   if (data.length === 0) return []
   const weeks = {}
@@ -440,6 +492,12 @@ const convertToWeekly = (data) => {
   return Object.values(weeks)
 }
 
+/**
+ * convertToMonthly
+ * Description: Aggregates daily K-line data into monthly bars by grouping on year-month.
+ * @param {Array} data - Array of daily K-line data objects
+ * @returns {Array} Array of monthly aggregated data objects
+ */
 const convertToMonthly = (data) => {
   if (data.length === 0) return []
   const months = {}
@@ -457,6 +515,12 @@ const convertToMonthly = (data) => {
   return Object.values(months)
 }
 
+/**
+ * getWeekNumber
+ * Description: Calculates the ISO week number for a given date.
+ * @param {Date} date - The date to calculate the week number for
+ * @returns {number} The ISO week number
+ */
 const getWeekNumber = (date) => {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
   const dayNum = d.getUTCDay() || 7
@@ -465,11 +529,21 @@ const getWeekNumber = (date) => {
   return Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
 }
 
+/**
+ * handleKlineTypeChange
+ * Description: Re-fetches stock history when the K-line type (day/week/month) selection changes.
+ * @returns {void}
+ */
 const handleKlineTypeChange = () => {
   console.log('handleKlineTypeChange, klineType:', klineType.value)
   fetchStockHistory()
 }
 
+/**
+ * fetchStocks
+ * Description: Fetches the stock list for the current market type with pagination and search keyword.
+ * @returns {Promise<void>}
+ */
 const fetchStocks = async () => {
   console.log('fetchStocks called, marketType:', marketType.value)
   try {
@@ -483,17 +557,35 @@ const fetchStocks = async () => {
   }
 }
 
+/**
+ * handleMarketChange
+ * Description: Resets the selected stock and quote, then re-fetches the stock list
+ *   when the market tab selection changes.
+ * @returns {void}
+ */
 const handleMarketChange = () => {
   selectedStock.value = null
   stockQuote.value = null
   fetchStocks()
 }
 
+/**
+ * handleSearch
+ * Description: Resets pagination to page 1 and re-fetches stocks when the search keyword changes.
+ * @returns {void}
+ */
 const handleSearch = () => {
   page.value = 1
   fetchStocks()
 }
 
+/**
+ * handleRowClick
+ * Description: Handles stock row selection: fetches quote data, initializes the chart,
+ *   then loads the stock history for the selected stock.
+ * @param {Object} row - The clicked stock row object
+ * @returns {Promise<void>}
+ */
 const handleRowClick = async (row) => {
   console.log('handleRowClick:', row.stock_code)
   selectedStock.value = row
@@ -513,6 +605,12 @@ const handleRowClick = async (row) => {
   }, 500)
 }
 
+/**
+ * handleTrade
+ * Description: Validates the trade form, shows a confirmation dialog with estimated
+ *   costs, then executes the buy or sell trade via the API.
+ * @returns {Promise<void>}
+ */
 const handleTrade = async () => {
   if (!selectedStock.value) {
     return ElMessage.warning(t('trade_page.select_stock_first'))

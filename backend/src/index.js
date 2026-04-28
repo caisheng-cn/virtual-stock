@@ -1,3 +1,13 @@
+/**
+ * File: index.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Application entry point. Configures Express middleware (CORS, JSON parsing,
+ *   i18n), mounts API routes under /api/v1, and registers a global error handler.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const express = require('express')
 const cors = require('cors')
 const dotenv = require('dotenv')

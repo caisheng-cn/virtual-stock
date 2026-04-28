@@ -1,3 +1,13 @@
+/**
+ * File: test-login.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Sends a test login request to the login API endpoint with
+ *              hardcoded test credentials and prints the response.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const http = require('http');
 
 const data = JSON.stringify({

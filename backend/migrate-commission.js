@@ -1,5 +1,21 @@
+/**
+ * File: migrate-commission.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Database migration script for commission feature. Creates the
+ *              commission_configs table, adds commission columns to transactions
+ *              table, and initializes default commission rate data.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const mysql = require('mysql2/promise')
 
+/**
+ * Executes the commission migration: creates tables, alters transactions,
+ * inserts default commission rates for A-share, HK, and US markets.
+ * @returns {Promise<void>}
+ */
 async function runMigration() {
   const connection = await mysql.createConnection({
     host: 'localhost',

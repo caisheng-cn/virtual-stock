@@ -1,3 +1,13 @@
+/**
+ * File: main.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Vue application entry point. Initializes and mounts the app with Pinia,
+ *              Element Plus, vue-i18n, and Vue Router. Manages locale persistence.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 import { createApp, watch } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
@@ -9,7 +19,12 @@ import router from './router'
 const pinia = createPinia()
 const app = createApp(App)
 
-// Set Element Plus locale
+/**
+ * setElementLocale
+ * Description: Dynamically loads and sets the Element Plus locale module based on the given locale string.
+ * @param {string} locale - The locale key ('zh-CN', 'zh-TW', or 'en')
+ * @returns {void}
+ */
 const setElementLocale = (locale) => {
   const localeMap = {
     'zh-CN': () => import('element-plus/dist/locale/zh-cn.mjs'),

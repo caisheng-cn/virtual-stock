@@ -97,6 +97,16 @@
 </template>
 
 <script setup>
+/**
+ * File: Home.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Dashboard page displaying balance cards (available funds, total assets,
+ *   market value, profit), navigation grid to other modules (trade, positions,
+ *   statistics, transactions, fund flow, group, about), and a language switcher.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -112,15 +122,32 @@ const groups = ref([])
 const balance = ref(null)
 const unreadCount = ref(0)
 
+/**
+ * formatMoney
+ * Description: Formats a numeric value as a comma-separated string with two decimal places.
+ * @param {number} value - The numeric value to format
+ * @returns {string} The formatted money string
+ */
 const formatMoney = (value) => {
   if (!value && value !== 0) return '0.00'
   return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
+/**
+ * switchLang
+ * Description: Switches the application UI language.
+ * @param {string} lang - The language code (e.g. 'zh-CN', 'zh-TW', 'en')
+ * @returns {void}
+ */
 const switchLang = (lang) => {
   i18n.global.locale.value = lang
 }
 
+/**
+ * onMounted lifecycle hook
+ * Description: Fetches user groups, balance, and unread message count on page load.
+ * @returns {Promise<void>}
+ */
 onMounted(async () => {
   try {
     const [groupsRes, balanceRes, unreadRes] = await Promise.all([
@@ -136,6 +163,11 @@ onMounted(async () => {
   }
 })
 
+/**
+ * handleLogout
+ * Description: Clears all localStorage data and redirects to the login page.
+ * @returns {void}
+ */
 const handleLogout = () => {
   localStorage.clear()
   router.push('/login')

@@ -1,6 +1,23 @@
+/**
+ * File: init-test.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Test data initialization script. Creates admin user, test users,
+ *              groups, user-group associations, balances, positions, stock pools,
+ *              invite codes, and commission configs in the database.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const bcrypt = require('bcryptjs')
 const mysql = require('mysql2/promise')
 
+/**
+ * Exchange rate constants for currency conversion.
+ * @constant {Object}
+ * @property {number} USD_TO_CNY - US Dollar to Chinese Yuan rate
+ * @property {number} HKD_TO_CNY - Hong Kong Dollar to Chinese Yuan rate
+ */
 const EXCHANGE_RATES = {
   USD_TO_CNY: 7,
   HKD_TO_CNY: 0.9
@@ -163,6 +180,12 @@ const US_STOCKS = [
   ['DOCU', 'DocuSign Inc.', 3]
 ]
 
+/**
+ * Main initialization routine.
+ * Creates admin account, test user, groups, stock pools, invite codes,
+ * and commission configuration. Inserts A-share, HK, and US stock data.
+ * @returns {Promise<void>}
+ */
 async function init() {
   const connection = await mysql.createConnection({
     host: 'localhost',

@@ -868,6 +868,16 @@
 </template>
 
 <script setup>
+/**
+ * File: Admin.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Full admin management panel with tabs for Dashboard, User/Group/Stock/
+ *   Invite/Commission/Market/Statistics management. Includes user detail with multi-tab
+ *   view, dividend/allotment operations, group member management, and system config.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { i18n } from '@/i18n'
@@ -879,6 +889,13 @@ import { getVersion } from '@/api/about'
 const router = useRouter()
 const { t } = useI18n()
 const currentLang = ref(i18n.global.locale.value)
+
+/**
+ * switchLang
+ * Description: Switches the admin panel UI language.
+ * @param {string} lang - The language code (e.g. 'zh-CN', 'zh-TW', 'en')
+ * @returns {void}
+ */
 const switchLang = (lang) => { i18n.global.locale.value = lang }
 const activeMenu = ref('dashboard')
 const marketTypeMap = { 1: t('market.a_share'), 2: t('market.hk_stock'), 3: t('market.us_stock') }
@@ -950,6 +967,12 @@ onMounted(() => {
   fetchData()
 })
 
+/**
+ * fetchData
+ * Description: Loads all admin dashboard data in parallel: stats, groups, users,
+ *   stocks, invite codes, commission configs, market configs, and statistics.
+ * @returns {Promise<void>}
+ */
 const fetchData = async () => {
   stats.value = await getStats().then(r => r.data || {})
   groupList.value = await getGroups().then(r => r.data?.list || [])
@@ -962,6 +985,11 @@ const fetchData = async () => {
   await loadUserStats()
 }
 
+/**
+ * loadStocks
+ * Description: Loads the stock list with pagination and optional market type filter.
+ * @returns {Promise<void>}
+ */
 const loadStocks = async () => {
   const params = { page: stockPage.value, pageSize: 20 }
   if (stockFilter.value) params.market_type = stockFilter.value
@@ -970,24 +998,52 @@ const loadStocks = async () => {
   stockTotal.value = res.data?.total || 0
 }
 
+/**
+ * loadGroupStats
+ * Description: Loads group statistics for the selected period (week/month/custom).
+ * @returns {Promise<void>}
+ */
 const loadGroupStats = async () => {
   groupStats.value = await getGroupStatistics({ period: statsPeriod.value }).then(r => r.data || [])
 }
 
+/**
+ * loadUserStats
+ * Description: Loads user activity statistics.
+ * @returns {Promise<void>}
+ */
 const loadUserStats = async () => {
   userStats.value = await getUserStatistics().then(r => r.data || [])
 }
 
+/**
+ * getMarketLabel
+ * Description: Returns the display label for a given market type.
+ * @param {number} marketType - The market type (1=A, 2=HK, 3=US)
+ * @returns {string} The market label string
+ */
 const getMarketLabel = (marketType) => {
   const labels = { 1: t('market.a_share'), 2: t('market.hk_stock'), 3: t('market.us_stock') }
   return labels[marketType] || t('common.unknown')
 }
 
+/**
+ * formatMoney
+ * Description: Formats a numeric value as a locale-specific currency string.
+ * @param {number} value - The numeric value to format
+ * @returns {string} The formatted money string
+ */
 const formatMoney = (value) => {
   if (!value) return '0.00'
   return parseFloat(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/**
+ * formatCommissionRate
+ * Description: Formats a commission rate value as a per-mille string.
+ * @param {number|string} rate - The commission rate value
+ * @returns {string} The formatted rate string (e.g. "0.5‰")
+ */
 const formatCommissionRate = (rate) => {
   return parseFloat(rate).toFixed(1) + '‰'
 }
@@ -1007,6 +1063,12 @@ const topActiveUsers = computed(() => {
   return sorted.slice(0, 3)
 })
 
+/**
+ * editCommission
+ * Description: Opens the commission edit dialog with pre-filled values from the selected row.
+ * @param {Object} row - The commission config row to edit
+ * @returns {void}
+ */
 const editCommission = (row) => {
   commissionForm.id = row.id
   commissionForm.market_type = row.market_type
@@ -1016,6 +1078,11 @@ const editCommission = (row) => {
   showCommissionDialog.value = true
 }
 
+/**
+ * saveCommission
+ * Description: Saves the updated commission rate configuration.
+ * @returns {Promise<void>}
+ */
 const saveCommission = async () => {
   try {
     await updateCommissionConfig(commissionForm.id, { commission_rate: commissionForm.newRate, remark: commissionForm.remark })
@@ -1027,6 +1094,12 @@ const saveCommission = async () => {
   }
 }
 
+/**
+ * editMarketConfig
+ * Description: Opens the market config edit dialog with pre-filled values from the selected row.
+ * @param {Object} row - The market config row to edit
+ * @returns {void}
+ */
 const editMarketConfig = (row) => {
   marketConfigForm.id = row.id
   marketConfigForm.refresh_time = row.refresh_time
@@ -1036,6 +1109,11 @@ const editMarketConfig = (row) => {
   showMarketConfigDialog.value = true
 }
 
+/**
+ * saveMarketConfig
+ * Description: Saves the updated market configuration settings.
+ * @returns {Promise<void>}
+ */
 const saveMarketConfig = async () => {
   try {
     await updateMarketConfig(marketConfigForm.id, marketConfigForm)
@@ -1047,15 +1125,31 @@ const saveMarketConfig = async () => {
   }
 }
 
+/**
+ * loadCommissionHistory
+ * Description: Loads the history of commission rate changes.
+ * @returns {Promise<void>}
+ */
 const loadCommissionHistory = async () => {
   commissionHistoryList.value = await getCommissionHistory().then(r => r.data?.list || [])
 }
 
+/**
+ * checkMissing
+ * Description: Checks for stocks with missing data and displays the result.
+ * @returns {Promise<void>}
+ */
 const checkMissing = async () => {
   missingList.value = await getMissingStocks().then(r => r.data || [])
   ElMessage.success(t('admin.update_success'))
 }
 
+/**
+ * handleMenuSelect
+ * Description: Handles sidebar menu item selection and switches the active view.
+ * @param {string} index - The menu item index
+ * @returns {void}
+ */
 const handleMenuSelect = (index) => {
   activeMenu.value = index
   if (index === 'about') {
@@ -1063,6 +1157,11 @@ const handleMenuSelect = (index) => {
   }
 }
 
+/**
+ * loadAbout
+ * Description: Loads version, copyright, and changelog info for the About section.
+ * @returns {Promise<void>}
+ */
 const loadAbout = async () => {
   try {
     const res = await getVersion()
@@ -1076,6 +1175,12 @@ const loadAbout = async () => {
   }
 }
 
+/**
+ * editGroup
+ * Description: Opens the group edit dialog with pre-filled values from the selected row.
+ * @param {Object} row - The group row to edit
+ * @returns {void}
+ */
 const editGroup = (row) => {
   editingGroupId.value = row.id
   groupForm.name = row.name
@@ -1084,6 +1189,11 @@ const editGroup = (row) => {
   showGroupDialog.value = true
 }
 
+/**
+ * saveGroup
+ * Description: Creates a new group or updates an existing one based on editingGroupId.
+ * @returns {Promise<void>}
+ */
 const saveGroup = async () => {
   try {
     if (editingGroupId.value) {
@@ -1101,6 +1211,12 @@ const saveGroup = async () => {
   }
 }
 
+/**
+ * deleteGroup
+ * Description: Prompts for admin password and deletes the selected group.
+ * @param {Object} row - The group row to delete
+ * @returns {Promise<void>}
+ */
 const deleteGroup = async (row) => {
   try {
     const { value: password } = await ElMessageBox.prompt(
@@ -1124,6 +1240,12 @@ const deleteGroup = async (row) => {
   }
 }
 
+/**
+ * viewGroupDetail
+ * Description: Opens the group detail dialog showing all members of the group.
+ * @param {Object} row - The group row to view details for
+ * @returns {Promise<void>}
+ */
 const viewGroupDetail = async (row) => {
   selectedGroup.value = row
   showGroupDetailDialog.value = true
@@ -1135,6 +1257,11 @@ const viewGroupDetail = async (row) => {
   }
 }
 
+/**
+ * loadAvailableUsers
+ * Description: Loads users not already in the selected group for adding as members.
+ * @returns {Promise<void>}
+ */
 const loadAvailableUsers = async () => {
   loadingAvailableUsers.value = true
   try {
@@ -1148,6 +1275,11 @@ const loadAvailableUsers = async () => {
   }
 }
 
+/**
+ * openAddMemberDialog
+ * Description: Opens the dialog for adding a new member to the selected group.
+ * @returns {Promise<void>}
+ */
 const openAddMemberDialog = async () => {
   showAddMemberDialog.value = true
   searchUserKeyword.value = ''
@@ -1155,6 +1287,11 @@ const openAddMemberDialog = async () => {
   await loadAvailableUsers()
 }
 
+/**
+ * addMember
+ * Description: Adds the selected user as a member of the current group.
+ * @returns {Promise<void>}
+ */
 const addMember = async () => {
   if (!addMemberForm.user_id) {
     ElMessage.warning(t('admin.select_user'))
@@ -1174,6 +1311,12 @@ const addMember = async () => {
   }
 }
 
+/**
+ * removeMember
+ * Description: Removes a member from the selected group after confirmation.
+ * @param {Object} row - The member row to remove
+ * @returns {Promise<void>}
+ */
 const removeMember = async (row) => {
   try {
     await ElMessageBox.confirm(
@@ -1192,11 +1335,23 @@ const removeMember = async (row) => {
   }
 }
 
+/**
+ * formatDate
+ * Description: Formats a date string to a localized Chinese date-time format.
+ * @param {string} date - The date string to format
+ * @returns {string} The formatted date string
+ */
 const formatDate = (date) => {
   if (!date) return '-'
   return new Date(date).toLocaleString('zh-CN')
 }
 
+/**
+ * toggleUserStatus
+ * Description: Toggles a user's status between normal and disabled.
+ * @param {Object} row - The user row to toggle status for
+ * @returns {Promise<void>}
+ */
 const toggleUserStatus = async (row) => {
   try {
     await toggleUserStatusAPI(row.id, { status: row.status === 1 ? 0 : 1 })
@@ -1207,6 +1362,12 @@ const toggleUserStatus = async (row) => {
   }
 }
 
+/**
+ * deleteUser
+ * Description: Prompts for admin password and deletes the selected user.
+ * @param {Object} row - The user row to delete
+ * @returns {Promise<void>}
+ */
 const deleteUser = async (row) => {
   try {
     const { value: password } = await ElMessageBox.prompt(
@@ -1230,6 +1391,13 @@ const deleteUser = async (row) => {
   }
 }
 
+/**
+ * viewUserDetail
+ * Description: Opens the user detail dialog with tabs for info, balance, positions,
+ *   login history, trade records, and fund flow.
+ * @param {Object} row - The user row to view details for
+ * @returns {Promise<void>}
+ */
 const viewUserDetail = async (row) => {
   currentUserId.value = row.id
   userDetailActiveTab.value = 'info'
@@ -1254,6 +1422,11 @@ const viewUserDetail = async (row) => {
   }
 }
 
+/**
+ * loadUserFundFlow
+ * Description: Loads fund flow records for the current user with date range filter.
+ * @returns {Promise<void>}
+ */
 const loadUserFundFlow = async () => {
   if (!currentUserId.value) return
   try {
@@ -1269,11 +1442,23 @@ const loadUserFundFlow = async () => {
   }
 }
 
+/**
+ * getFundFlowTagType
+ * Description: Returns the Element Plus tag type for a given fund flow trade type.
+ * @param {number} tradeType - The trade type code
+ * @returns {string} The tag type string
+ */
 const getFundFlowTagType = (tradeType) => {
   const map = { 5: 'success', 1: 'danger', 2: 'success', 3: 'warning', 4: 'info' }
   return map[tradeType] || ''
 }
 
+/**
+ * getFundFlowTypeLabel
+ * Description: Returns the display label for a given fund flow type.
+ * @param {string} label - The type label key
+ * @returns {string} The localized type label
+ */
 const getFundFlowTypeLabel = (label) => {
   const labels = {
     initial_fund: t('fund_flow.initial_fund'),
@@ -1286,6 +1471,12 @@ const getFundFlowTypeLabel = (label) => {
   return labels[label] || label
 }
 
+/**
+ * toggleTradeEnabled
+ * Description: Toggles a user's trade permission between allowed and forbidden.
+ * @param {Object} row - The user row to toggle trade permission for
+ * @returns {Promise<void>}
+ */
 const toggleTradeEnabled = async (row) => {
   const newValue = row.trade_enabled === 1 ? 0 : 1
   try {
@@ -1297,6 +1488,12 @@ const toggleTradeEnabled = async (row) => {
   }
 }
 
+/**
+ * toggleAdminAccess
+ * Description: Toggles a user's admin access between yes and no.
+ * @param {Object} row - The user row to toggle admin access for
+ * @returns {Promise<void>}
+ */
 const toggleAdminAccess = async (row) => {
   const newValue = row.admin_access === 1 ? 0 : 1
   try {
@@ -1308,6 +1505,11 @@ const toggleAdminAccess = async (row) => {
   }
 }
 
+/**
+ * loadUserLoginHistory
+ * Description: Loads the login history for the currently selected user.
+ * @returns {Promise<void>}
+ */
 const loadUserLoginHistory = async () => {
   try {
     const res = await getUserLoginHistory(currentUserId.value)
@@ -1317,6 +1519,11 @@ const loadUserLoginHistory = async () => {
   }
 }
 
+/**
+ * loadUserTransactions
+ * Description: Loads the transaction records for the currently selected user.
+ * @returns {Promise<void>}
+ */
 const loadUserTransactions = async () => {
   try {
     const res = await getUserTransactions(currentUserId.value)
@@ -1326,6 +1533,11 @@ const loadUserTransactions = async () => {
   }
 }
 
+/**
+ * createStock
+ * Description: Creates a new stock entry via the API and refreshes the stock list.
+ * @returns {Promise<void>}
+ */
 const createStock = async () => {
   try {
     await createStockAPI(stockForm)
@@ -1337,6 +1549,12 @@ const createStock = async () => {
   }
 }
 
+/**
+ * confirmDeleteStock
+ * Description: Deletes a stock after checking for existing positions and user confirmation.
+ * @param {Object} row - The stock row to delete
+ * @returns {Promise<void>}
+ */
 const confirmDeleteStock = async (row) => {
   try {
     const res = await getStockPositions(row.id)
@@ -1360,12 +1578,23 @@ const confirmDeleteStock = async (row) => {
   }
 }
 
+/**
+ * openDividendDialog
+ * Description: Opens the dividend payment dialog for the selected stock.
+ * @param {Object} row - The stock row to pay dividends for
+ * @returns {void}
+ */
 const openDividendDialog = (row) => {
   dividendStock.value = row
   dividendAmount.value = 0.1
   showDividendDialog.value = true
 }
 
+/**
+ * confirmDividend
+ * Description: Executes the dividend payment for the selected stock.
+ * @returns {Promise<void>}
+ */
 const confirmDividend = async () => {
   if (!dividendAmount.value || dividendAmount.value <= 0) {
     return ElMessage.warning(t('admin.dividend_amount'))
@@ -1383,12 +1612,23 @@ const confirmDividend = async () => {
   }
 }
 
+/**
+ * openAllotmentDialog
+ * Description: Opens the allotment (bonus share) dialog for the selected stock.
+ * @param {Object} row - The stock row to issue allotments for
+ * @returns {void}
+ */
 const openAllotmentDialog = (row) => {
   allotmentStock.value = row
   allotmentShares.value = 1
   showAllotmentDialog.value = true
 }
 
+/**
+ * confirmAllotment
+ * Description: Executes the share allotment (bonus shares) for the selected stock.
+ * @returns {Promise<void>}
+ */
 const confirmAllotment = async () => {
   if (!allotmentShares.value || allotmentShares.value <= 0) {
     return ElMessage.warning(t('admin.allotment_shares'))
@@ -1406,6 +1646,11 @@ const confirmAllotment = async () => {
   }
 }
 
+/**
+ * createInvite
+ * Description: Creates a new invite code for the specified group.
+ * @returns {Promise<void>}
+ */
 const createInvite = async () => {
   try {
     await createInviteCode(inviteForm)
@@ -1417,6 +1662,11 @@ const createInvite = async () => {
   }
 }
 
+/**
+ * handleLogout
+ * Description: Clears admin authentication data and redirects to the admin login page.
+ * @returns {void}
+ */
 const handleLogout = () => {
   localStorage.removeItem('adminToken')
   localStorage.removeItem('adminId')

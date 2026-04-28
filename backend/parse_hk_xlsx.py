@@ -1,3 +1,14 @@
+#
+# File: parse_hk_xlsx.py
+# Created: 2024-01-01
+# Author: CAISHENG <caisheng.cn@gmail.com>
+# Description: Parses HK stock data from an xlsx spreadsheet file.
+#              Extracts stock codes and names from cells filtered by category (Equity,
+#              Exchange Traded Products, Real Estate Investment Trusts).
+# Version History:
+#   1.0 - Initial version with xlsx parsing and stock extraction
+#
+
 import zipfile, xml.etree.ElementTree as ET, re, json, sys
 
 with zipfile.ZipFile('/tmp/hk_stocks.xlsx') as z:

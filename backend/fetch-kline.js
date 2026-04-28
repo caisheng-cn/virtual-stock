@@ -1,8 +1,24 @@
+/**
+ * File: fetch-kline.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Fetches A-share stock K-line data from the Sina Finance API
+ *              and inserts it into the local stock_prices database table.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const axios = require('axios')
 const mysql = require('mysql2/promise')
 
 const SINA_REFERER = 'http://finance.sina.com.cn'
 
+/**
+ * Fetches daily K-line data for an A-share stock from Sina Finance API.
+ * @param {string} code - Stock code (e.g., "600519")
+ * @param {boolean} isShCode - Whether the stock trades on Shanghai exchange
+ * @returns {Promise<Array<{stock_code: string, trade_date: string, open_price: number, high_price: number, low_price: number, close_price: number, volume: number}>>}
+ */
 async function fetchAKLineData(code, isShCode) {
   const prefix = isShCode ? 'sh' : 'sz'
   const url = `http://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${prefix}${code}&scale=240&ma=no&datalen=365`
@@ -21,6 +37,11 @@ async function fetchAKLineData(code, isShCode) {
   }))
 }
 
+/**
+ * Main entry point. Fetches A-share stock list from stock_pools, downloads
+ * K-line data for each, and inserts into stock_prices table.
+ * @returns {Promise<void>}
+ */
 async function main() {
   const connection = await mysql.createConnection({
     host: 'localhost',

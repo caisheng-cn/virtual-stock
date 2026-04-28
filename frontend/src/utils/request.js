@@ -1,3 +1,13 @@
+/**
+ * File: request.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Axios HTTP client configured with baseURL '/api/v1'. Attaches Bearer token from
+ *              localStorage on requests and handles errors / 401 redirects on responses.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 import axios from 'axios'
 
 const request = axios.create({

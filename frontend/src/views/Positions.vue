@@ -87,6 +87,16 @@
 </template>
 
 <script setup>
+/**
+ * File: Positions.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Current positions page displaying a table of held stocks with
+ *   code, name, market, shares, cost price, current price, market value, and
+ *   floating P&L. Includes a sell confirmation dialog.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -101,17 +111,35 @@ const sellRow = ref({})
 const sellShares = ref(1)
 const selling = ref(false)
 
+/**
+ * formatDate
+ * Description: Formats an ISO date string to a localized Chinese date format.
+ * @param {string} dateStr - The ISO date string to format
+ * @returns {string} The formatted date string
+ */
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
   const d = new Date(dateStr)
   return d.toLocaleDateString('zh-CN')
 }
 
+/**
+ * getMarketLabel
+ * Description: Returns the display label for a given market type.
+ * @param {number} marketType - The market type (1=A, 2=HK, 3=US)
+ * @returns {string} The market label string
+ */
 const getMarketLabel = (marketType) => {
   const labels = { 1: t('market.a_share'), 2: t('market.hk_stock'), 3: t('market.us_stock') }
   return labels[marketType] || t('common.unknown')
 }
 
+/**
+ * formatMoney
+ * Description: Formats a numeric value as a comma-separated string with two decimal places.
+ * @param {number} value - The numeric value to format
+ * @returns {string} The formatted money string
+ */
 const formatMoney = (value) => {
   if (!value && value !== 0) return '0.00'
   return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
@@ -121,6 +149,11 @@ onMounted(async () => {
   fetchPositions()
 })
 
+/**
+ * fetchPositions
+ * Description: Fetches the current list of positions from the API.
+ * @returns {Promise<void>}
+ */
 const fetchPositions = async () => {
   try {
     const res = await getPositions()
@@ -130,12 +163,23 @@ const fetchPositions = async () => {
   }
 }
 
+/**
+ * openSellDialog
+ * Description: Opens the sell confirmation dialog for the selected position row.
+ * @param {Object} row - The position row to sell
+ * @returns {void}
+ */
 const openSellDialog = (row) => {
   sellRow.value = row
   sellShares.value = 1
   sellDialogVisible.value = true
 }
 
+/**
+ * confirmSell
+ * Description: Executes the sell trade for the selected position with the specified shares.
+ * @returns {Promise<void>}
+ */
 const confirmSell = async () => {
   if (!sellShares.value || sellShares.value < 1) {
     return ElMessage.warning(t('positions_page.enter_sell_shares'))

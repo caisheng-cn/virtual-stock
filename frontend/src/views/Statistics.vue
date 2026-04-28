@@ -107,6 +107,15 @@
 </template>
 
 <script setup>
+/**
+ * File: Statistics.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Profit statistics page displaying floating/realized P&L, position
+ *   counts, trade statistics, and a transaction records table.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -119,6 +128,12 @@ const stats = ref({})
 const tradeStats = ref({})
 const transactions = ref([])
 
+/**
+ * formatMoney
+ * Description: Formats a numeric value as a comma-separated string with two decimal places.
+ * @param {number} value - The numeric value to format
+ * @returns {string} The formatted money string
+ */
 const formatMoney = (value) => {
   if (!value && value !== 0) return '0.00'
   return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
@@ -128,6 +143,12 @@ onMounted(async () => {
   fetchStats()
 })
 
+/**
+ * fetchStats
+ * Description: Fetches profit statistics, position stats, trade stats, and
+ *   transaction records in parallel from the API.
+ * @returns {Promise<void>}
+ */
 const fetchStats = async () => {
   try {
     const [profit, posStats, trade, txRes] = await Promise.all([

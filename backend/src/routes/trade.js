@@ -1,3 +1,14 @@
+/**
+ * File: trade.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Stock trading routes. Handles buy and sell orders with balance validation,
+ *   position tracking, commission calculation, and transaction recording. All trades are
+ *   wrapped in database transactions for consistency.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const express = require('express')
 const { Transaction, Position, UserBalance, User, StockPricesCache, MarketConfig, GroupMessage, UserGroup, sequelize } = require('../models')
 const auth = require('../utils/auth')
@@ -7,6 +18,19 @@ const { toCNY } = require('../utils/currency')
 
 const router = express.Router()
 
+/**
+ * Create a group message after a trade (buy/sell/dividend/allotment).
+ * Broadcasts the trade event to all groups the user belongs to.
+ * @param {number} userId - The user making the trade
+ * @param {number} mType - Message type: 1 (buy), 2 (sell), 3 (dividend), 4 (allotment)
+ * @param {string} code - Stock code
+ * @param {string} name - Stock name
+ * @param {number} marketType - Market type
+ * @param {number} shares - Number of shares traded
+ * @param {number} price - Trade price per share
+ * @param {number} amount - Total trade amount
+ * @returns {Promise<void>}
+ */
 async function createGroupMessage(userId, mType, code, name, marketType, shares, price, amount) {
   try {
     const userGroups = await UserGroup.findAll({ where: { user_id: userId } })
@@ -33,6 +57,12 @@ async function createGroupMessage(userId, mType, code, name, marketType, shares,
   }
 }
 
+/**
+ * Check if the user's account is enabled and trade-enabled.
+ * @param {Object} user - User model instance
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<Object|null>} JSON response if blocked, null if allowed
+ */
 const checkTradeEnabled = async (user, res) => {
    if (user.status === 0) {
      return res.json({ code: -1, message: res.t('auth.user_disabled') })
@@ -43,6 +73,13 @@ const checkTradeEnabled = async (user, res) => {
    return null
  }
 
+/**
+ * Check if the current time is within the allowed trading window for a market type.
+ * If the market config has trading time restrictions disabled, the check is skipped.
+ * @param {number} marketType - Market type
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<Object|null>} JSON response if outside trading hours, null if allowed
+ */
 const checkTradeTime = async (marketType, res) => {
    const config = await MarketConfig.findOne({ where: { market_type: marketType } })
    if (!config) {
@@ -63,6 +100,13 @@ const checkTradeTime = async (marketType, res) => {
    return null
  }
 
+/**
+ * POST /api/v1/trade/buy
+ * Execute a buy order. Validates user status, trading time, available balance,
+ * creates/updates position, deducts cash, records transaction, and broadcasts group message.
+ * Body: { stock_code, market_type, shares }
+ * Response: { code, message, data: { tradeId, stockCode, price, shares, amount, commission, ... } }
+ */
 router.post('/buy', auth, async (req, res) => {
    const t = await sequelize.transaction()
    try {
@@ -170,6 +214,13 @@ router.post('/buy', auth, async (req, res) => {
     }
 });
 
+/**
+ * POST /api/v1/trade/sell
+ * Execute a sell order. Validates user status, trading time, position sufficiency,
+ * updates/deletes position, adds cash, records transaction with realized profit, broadcasts message.
+ * Body: { stock_code, market_type, shares }
+ * Response: { code, message, data: { tradeId, stockCode, price, shares, amount, commission, netAmount, ... } }
+ */
 router.post('/sell', auth, async (req, res) => {
    const t = await sequelize.transaction()
    try {

@@ -1,3 +1,15 @@
+/**
+ * File: index.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Sequelize model definitions. Defines all 16 database models used by the
+ *   virtual stock platform, including User, Group, Position, Transaction, StockPool,
+ *   InviteCode, AdminUser, CommissionConfig, MarketConfig, GroupMessage, and more.
+ *   Exports the configured sequelize instance and all model constructors.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const { Sequelize, DataTypes } = require('sequelize')
 const config = require('../../config/database')
 
@@ -9,6 +21,11 @@ const sequelize = new Sequelize(config.database, config.username, config.passwor
   logging: false
 })
 
+/**
+ * User model — table: users
+ * Fields: id, username, password, nickname, email, phone, status, trade_enabled,
+ *         admin_access, last_trade_date, language, created_at, updated_at
+ */
 const User = sequelize.define('User', {
    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
    username: { type: DataTypes.STRING(50), allowNull: false, unique: true },
@@ -25,6 +42,10 @@ const User = sequelize.define('User', {
    updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'users', timestamps: false })
 
+/**
+ * Group model — table: groups
+ * Fields: id, name, description, init_cash, currency, status, created_at, updated_at
+ */
 const Group = sequelize.define('Group', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   name: { type: DataTypes.STRING(100), allowNull: false, unique: true },
@@ -36,6 +57,10 @@ const Group = sequelize.define('Group', {
   updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'groups', timestamps: false })
 
+/**
+ * UserGroup model — table: user_groups
+ * Join table linking users to groups. Fields: id, user_id, group_id, joined_at, last_read_message_id
+ */
 const UserGroup = sequelize.define('UserGroup', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   user_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -44,6 +69,11 @@ const UserGroup = sequelize.define('UserGroup', {
   last_read_message_id: { type: DataTypes.INTEGER, defaultValue: 0 }
 }, { tableName: 'user_groups', timestamps: false })
 
+/**
+ * UserBalance model — table: user_balance
+ * Tracks each user's cash balance per group. Fields: id, user_id, group_id, cash,
+ * frozen_cash, total_cost, init_cash, created_at, updated_at
+ */
 const UserBalance = sequelize.define('UserBalance', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   user_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -56,6 +86,11 @@ const UserBalance = sequelize.define('UserBalance', {
   updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'user_balance', timestamps: false })
 
+/**
+ * Position model — table: positions
+ * Represents a user's holding in a stock. Fields: id, user_id, stock_code, market_type,
+ * group_id, shares, avg_cost, total_cost, updated_at
+ */
 const Position = sequelize.define('Position', {
   id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
   user_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -68,6 +103,12 @@ const Position = sequelize.define('Position', {
   updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'positions', timestamps: false })
 
+/**
+ * Transaction model — table: transactions
+ * Records every trade or financial event (buy, sell, dividend, allotment, initial fund).
+ * Fields: id, user_id, group_id, stock_code, stock_name, market_type, trade_type, price,
+ * shares, amount, commission, commission_rate, balance_after, profit, trade_date, status, created_at
+ */
 const Transaction = sequelize.define('Transaction', {
   id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
   user_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -88,6 +129,10 @@ const Transaction = sequelize.define('Transaction', {
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'transactions', timestamps: false })
 
+/**
+ * StockPool model — table: stock_pools
+ * Master list of all tradable stocks. Fields: id, stock_code, stock_name, market_type, status, created_at
+ */
 const StockPool = sequelize.define('StockPool', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   stock_code: { type: DataTypes.STRING(20), allowNull: false },
@@ -97,6 +142,11 @@ const StockPool = sequelize.define('StockPool', {
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'stock_pools', timestamps: false })
 
+/**
+ * StockPrice model — table: stock_prices
+ * Historical daily price data for stocks. Fields: id, stock_code, stock_name, market_type,
+ * trade_date, open_price, high_price, low_price, close_price, prev_close, volume, amount, created_at
+ */
 const StockPrice = sequelize.define('StockPrice', {
   id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
   stock_code: { type: DataTypes.STRING(20), allowNull: false },
@@ -113,6 +163,11 @@ const StockPrice = sequelize.define('StockPrice', {
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'stock_prices', timestamps: false })
 
+/**
+ * StockPricesCache model — table: stock_prices_cache
+ * Caches the most recent day's closing price for each stock to reduce external API calls.
+ * Fields: id, stock_code, market_type, trade_date, close_price, prev_close, change_percent, updated_at
+ */
 const StockPricesCache = sequelize.define('StockPricesCache', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   stock_code: { type: DataTypes.STRING(20), allowNull: false },
@@ -124,6 +179,11 @@ const StockPricesCache = sequelize.define('StockPricesCache', {
   updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'stock_prices_cache', timestamps: false })
 
+/**
+ * InviteCode model — table: invite_codes
+ * One-time or limited-use invite codes linked to a group for user registration.
+ * Fields: id, code, group_id, expire_date, use_limit, used_count, status, created_at
+ */
 const InviteCode = sequelize.define('InviteCode', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   code: { type: DataTypes.STRING(20), allowNull: false, unique: true },
@@ -135,6 +195,11 @@ const InviteCode = sequelize.define('InviteCode', {
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'invite_codes', timestamps: false })
 
+/**
+ * AdminUser model — table: admin_users
+ * Administrator accounts with login credentials and permissions.
+ * Fields: id, username, password, permissions, status, created_at, updated_at
+ */
 const AdminUser = sequelize.define('AdminUser', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   username: { type: DataTypes.STRING(50), allowNull: false, unique: true },
@@ -145,6 +210,11 @@ const AdminUser = sequelize.define('AdminUser', {
   updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'admin_users', timestamps: false })
 
+/**
+ * CommissionConfig model — table: commission_configs
+ * Commission rate configuration per market type and trade type (buy/sell).
+ * Fields: id, market_type, trade_type, commission_rate, updated_at
+ */
 const CommissionConfig = sequelize.define('CommissionConfig', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   market_type: { type: DataTypes.TINYINT, allowNull: false },
@@ -153,6 +223,11 @@ const CommissionConfig = sequelize.define('CommissionConfig', {
   updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'commission_configs', timestamps: false })
 
+/**
+ * LoginHistory model — table: login_history
+ * Records user and admin login events for auditing.
+ * Fields: id, user_id, login_time, ip_address, user_agent
+ */
 const LoginHistory = sequelize.define('LoginHistory', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   user_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -161,6 +236,11 @@ const LoginHistory = sequelize.define('LoginHistory', {
   user_agent: { type: DataTypes.STRING(255) }
 }, { tableName: 'login_history', timestamps: false })
 
+/**
+ * MarketConfig model — table: market_config
+ * Market trading hours and refresh schedule per market type.
+ * Fields: id, market_type, refresh_time, trade_start, trade_end, enabled, created_at
+ */
 const MarketConfig = sequelize.define('MarketConfig', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   market_type: { type: DataTypes.TINYINT, allowNull: false },
@@ -171,6 +251,11 @@ const MarketConfig = sequelize.define('MarketConfig', {
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'market_config', timestamps: false })
 
+/**
+ * CommissionHistory model — table: commission_history
+ * Audit log of commission rate changes. Records old and new values with the admin who made the change.
+ * Fields: id, market_type, trade_type, old_rate, new_rate, changed_by, changed_at, remark
+ */
 const CommissionHistory = sequelize.define('CommissionHistory', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   market_type: { type: DataTypes.TINYINT, allowNull: false },
@@ -182,6 +267,12 @@ const CommissionHistory = sequelize.define('CommissionHistory', {
   remark: { type: DataTypes.STRING(200) }
 }, { tableName: 'commission_history', timestamps: false })
 
+/**
+ * GroupMessage model — table: group_messages
+ * Trade activity messages broadcast to groups (buy, sell, dividend, allotment events).
+ * Fields: id, group_id, user_id, message_type, stock_code, stock_name, market_type,
+ * shares, price, amount, content, created_at
+ */
 const GroupMessage = sequelize.define('GroupMessage', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   group_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -197,6 +288,11 @@ const GroupMessage = sequelize.define('GroupMessage', {
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'group_messages', timestamps: false })
 
+/**
+ * MessageLike model — table: message_likes
+ * Tracks which users have liked a group message.
+ * Fields: id, message_id, user_id, created_at
+ */
 const MessageLike = sequelize.define('MessageLike', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   message_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -204,6 +300,11 @@ const MessageLike = sequelize.define('MessageLike', {
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'message_likes', timestamps: false })
 
+/**
+ * MessageReply model — table: message_replies
+ * Replies to group messages by users.
+ * Fields: id, message_id, user_id, content, created_at
+ */
 const MessageReply = sequelize.define('MessageReply', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   message_id: { type: DataTypes.INTEGER, allowNull: false },

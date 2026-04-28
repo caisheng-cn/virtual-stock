@@ -1,3 +1,15 @@
+/**
+ * File: admin.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Admin panel API routes. Provides full administrative functionality
+ *   including user management, group management, stock pool management, invite code
+ *   management, commission configuration, market configuration, statistics, and
+ *   dividend/allotment operations. All routes except /login require JWT auth.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const express = require('express')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
@@ -8,6 +20,12 @@ const commissionService = require('../services/commission')
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'virtual-stock-secret-key-2024'
 
+/**
+ * POST /api/v1/admin/login
+ * Admin login. Authenticates with username/password and returns a JWT token.
+ * Body: { username, password }
+ * Response: { code, data: { token, adminId, username } }
+ */
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body
@@ -47,6 +65,12 @@ router.post('/login', async (req, res) => {
 const auth = require('../utils/auth')
 router.use(auth)
 
+/**
+ * GET /api/v1/admin/stats
+ * Get dashboard statistics: user count, group count, stock count, new users today,
+ * active users in 7 days, total transactions, total trade amount, today's transactions.
+ * Response: { code, data: { userCount, groupCount, stockCount, todayNewUsers, activeUsers7d, ... } }
+ */
 router.get('/stats', async (req, res) => {
   try {
     const userCount = await User.count()
@@ -83,6 +107,12 @@ router.get('/stats', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/groups
+ * List all groups with pagination.
+ * Query: { page?, pageSize? }
+ * Response: { code, data: { list: Group[], total } }
+ */
 router.get('/groups', async (req, res) => {
   try {
     const { page = 1, pageSize = 10 } = req.query
@@ -96,6 +126,12 @@ router.get('/groups', async (req, res) => {
   }
 })
 
+/**
+ * POST /api/v1/admin/groups
+ * Create a new group. Group name must be unique.
+ * Body: { name, description?, init_cash, currency? }
+ * Response: { code, data: Group }
+ */
 router.post('/groups', async (req, res) => {
   try {
     const { name, description, init_cash, currency } = req.body
@@ -115,6 +151,12 @@ router.post('/groups', async (req, res) => {
   }
 })
 
+/**
+ * PUT /api/v1/admin/groups/:id
+ * Update a group's name, description, init_cash, or status.
+ * Body: { name?, description?, init_cash?, status? }
+ * Response: { code, message }
+ */
 router.put('/groups/:id', async (req, res) => {
   try {
     const { name, description, init_cash, status } = req.body
@@ -125,6 +167,12 @@ router.put('/groups/:id', async (req, res) => {
   }
 })
 
+/**
+ * DELETE /api/v1/admin/groups/:id
+ * Delete a group. Requires admin password confirmation. Group must have no members.
+ * Body: { password }
+ * Response: { code, message }
+ */
 router.delete('/groups/:id', async (req, res) => {
   try {
     const { password } = req.body
@@ -156,6 +204,12 @@ router.delete('/groups/:id', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/groups/:id/users
+ * List all users in a group with their balance, asset stats, login history, and last trade time.
+ * Query: { page?, pageSize? }
+ * Response: { code, data: { list: Array<{ user_id, username, nickname, cash, total_assets, profit, ... }>, total } }
+ */
 router.get('/groups/:id/users', async (req, res) => {
   try {
     const { page = 1, pageSize = 10 } = req.query
@@ -221,6 +275,12 @@ router.get('/groups/:id/users', async (req, res) => {
   }
 })
 
+/**
+ * POST /api/v1/admin/groups/:id/users
+ * Manually add a user to a group. Creates a balance record if one doesn't exist.
+ * Body: { user_id, init_cash? }
+ * Response: { code, message }
+ */
 router.post('/groups/:id/users', async (req, res) => {
   try {
     const groupId = req.params.id
@@ -263,6 +323,11 @@ router.post('/groups/:id/users', async (req, res) => {
   }
 })
 
+/**
+ * DELETE /api/v1/admin/groups/:id/users/:userId
+ * Remove a user from a group.
+ * Response: { code, message }
+ */
 router.delete('/groups/:id/users/:userId', async (req, res) => {
   try {
     const groupId = req.params.id
@@ -279,6 +344,13 @@ router.delete('/groups/:id/users/:userId', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/users
+ * List all users with pagination, keyword search, group and status filters.
+ * Each user includes group memberships, balance, position value, and profit data.
+ * Query: { page?, pageSize?, keyword?, group_id?, status? }
+ * Response: { code, data: { list: Array<{ id, username, nickname, status, groups, cash, ... }>, total } }
+ */
 router.get('/users', async (req, res) => {
   try {
     const { page = 1, pageSize = 10, keyword, group_id, status } = req.query
@@ -343,6 +415,12 @@ router.get('/users', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/users/:id/detail
+ * Get detailed user information including profile, balance, positions with current values,
+ * floating profit, and realized profit.
+ * Response: { code, data: { user, balance, positions, positions_value, floating_profit, realized_profit } }
+ */
 router.get('/users/:id/detail', async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id)
@@ -404,6 +482,12 @@ router.get('/users/:id/detail', async (req, res) => {
   }
 })
 
+/**
+ * PUT /api/v1/admin/users/:id/trade-enabled
+ * Enable or disable trading for a user.
+ * Body: { trade_enabled: 0 | 1 }
+ * Response: { code, message }
+ */
 router.put('/users/:id/trade-enabled', async (req, res) => {
   try {
     const { trade_enabled } = req.body
@@ -414,6 +498,12 @@ router.put('/users/:id/trade-enabled', async (req, res) => {
   }
 })
 
+/**
+ * PUT /api/v1/admin/users/:id/admin-access
+ * Grant or revoke admin panel access for a user.
+ * Body: { admin_access: 0 | 1 }
+ * Response: { code, message }
+ */
 router.put('/users/:id/admin-access', async (req, res) => {
   try {
     const { admin_access } = req.body
@@ -424,6 +514,12 @@ router.put('/users/:id/admin-access', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/users/:id/login-history
+ * Get login history for a specific user with date range and pagination.
+ * Query: { start_date?, end_date?, page?, pageSize? }
+ * Response: { code, data: { list: LoginHistory[], total } }
+ */
 router.get('/users/:id/login-history', async (req, res) => {
   try {
     const { start_date, end_date, page = 1, pageSize = 10 } = req.query
@@ -446,6 +542,12 @@ router.get('/users/:id/login-history', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/users/:id/transactions
+ * Get transaction history for a specific user with date/stock filters and pagination.
+ * Query: { start_date?, end_date?, stock_code?, page?, pageSize? }
+ * Response: { code, data: { list: Transaction[], total } }
+ */
 router.get('/users/:id/transactions', async (req, res) => {
   try {
     const { start_date, end_date, stock_code, page = 1, pageSize = 10 } = req.query
@@ -466,6 +568,12 @@ router.get('/users/:id/transactions', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/users/:id/fund-flow
+ * Get fund flow analysis for a specific user.
+ * Query: { start_date?, end_date? }
+ * Response: { code, data: { list: Array<{ tradeDate, tradeType, changeAmount, ... }> } }
+ */
 router.get('/users/:id/fund-flow', async (req, res) => {
   try {
     const { start_date, end_date } = req.query
@@ -518,6 +626,12 @@ router.get('/users/:id/fund-flow', async (req, res) => {
   }
 })
 
+/**
+ * PUT /api/v1/admin/users/:id/status
+ * Update a user's account status (enable/disable).
+ * Body: { status: 0 | 1 }
+ * Response: { code, message }
+ */
 router.put('/users/:id/status', async (req, res) => {
   try {
     const { status } = req.body
@@ -528,6 +642,13 @@ router.put('/users/:id/status', async (req, res) => {
   }
 })
 
+/**
+ * DELETE /api/v1/admin/users/:id
+ * Permanently delete a user and all associated data (transactions, positions, balance,
+ * group memberships, login history) within a database transaction. Requires admin password.
+ * Body: { password }
+ * Response: { code, message }
+ */
 router.delete('/users/:id', async (req, res) => {
   try {
     const { password } = req.body
@@ -570,6 +691,12 @@ router.delete('/users/:id', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/stocks
+ * List all stocks in the pool with optional market type filter.
+ * Query: { page?, pageSize?, market_type? }
+ * Response: { code, data: { list: StockPool[], total } }
+ */
 router.get('/stocks', async (req, res) => {
   try {
     const { page = 1, pageSize = 20, market_type } = req.query
@@ -587,6 +714,12 @@ router.get('/stocks', async (req, res) => {
   }
 })
 
+/**
+ * POST /api/v1/admin/stocks
+ * Add a new stock to the pool. Stock code + market type must be unique.
+ * Body: { stock_code, stock_name, market_type }
+ * Response: { code, data: StockPool }
+ */
 router.post('/stocks', async (req, res) => {
   try {
     const { stock_code, stock_name, market_type } = req.body
@@ -606,6 +739,11 @@ router.post('/stocks', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/stocks/:id/positions
+ * Get all user positions for a specific stock.
+ * Response: { code, data: { stock_code, stock_name, positions: Array<{ user_id, username, nickname, shares }> } }
+ */
 router.get('/stocks/:id/positions', async (req, res) => {
   try {
     const stock = await StockPool.findByPk(req.params.id)
@@ -630,6 +768,11 @@ router.get('/stocks/:id/positions', async (req, res) => {
   }
 })
 
+/**
+ * DELETE /api/v1/admin/stocks/:id
+ * Remove a stock from the pool.
+ * Response: { code, message }
+ */
 router.delete('/stocks/:id', async (req, res) => {
   try {
     await StockPool.destroy({ where: { id: req.params.id } })
@@ -639,6 +782,13 @@ router.delete('/stocks/:id', async (req, res) => {
   }
 })
 
+/**
+ * POST /api/v1/admin/stocks/:id/dividend
+ * Issue a cash dividend for a stock. All users holding this stock receive the dividend
+ * amount per share. Creates dividend transactions and group messages.
+ * Body: { amount_per_share }
+ * Response: { code, data: { affected_users } }
+ */
 router.post('/stocks/:id/dividend', async (req, res) => {
   try {
     const { amount_per_share } = req.body
@@ -710,6 +860,13 @@ router.post('/stocks/:id/dividend', async (req, res) => {
   }
 })
 
+/**
+ * POST /api/v1/admin/stocks/:id/allotment
+ * Issue a stock allotment (bonus shares) for a stock. Users receive additional shares
+ * based on the bonus_per_share ratio. Creates allotment transactions and group messages.
+ * Body: { bonus_per_share }
+ * Response: { code, data: { affected_users } }
+ */
 router.post('/stocks/:id/allotment', async (req, res) => {
   try {
     const { bonus_per_share } = req.body
@@ -779,6 +936,12 @@ router.post('/stocks/:id/allotment', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/stocks/missing
+ * Find stocks that are missing from the price cache for a given date.
+ * Query: { market_type?, date? }
+ * Response: { code, data: Array<{ stock_code, stock_name, market_type, trade_date, status }> }
+ */
 router.get('/stocks/missing', async (req, res) => {
   try {
     const { market_type, date } = req.query
@@ -811,6 +974,12 @@ router.get('/stocks/missing', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/invite-codes
+ * List all invite codes with optional group filter and pagination.
+ * Query: { page?, pageSize?, group_id? }
+ * Response: { code, data: { list: InviteCode[], total } }
+ */
 router.get('/invite-codes', async (req, res) => {
   try {
     const { page = 1, pageSize = 10, group_id } = req.query
@@ -828,6 +997,12 @@ router.get('/invite-codes', async (req, res) => {
   }
 })
 
+/**
+ * POST /api/v1/admin/invite-codes
+ * Generate a new invite code for a group.
+ * Body: { group_id, expire_days?, use_limit? }
+ * Response: { code, data: InviteCode }
+ */
 router.post('/invite-codes', async (req, res) => {
   try {
     const { group_id, expire_days, use_limit } = req.body
@@ -845,6 +1020,11 @@ router.post('/invite-codes', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/commission-configs
+ * Get all commission rate configurations sorted by market type and trade type.
+ * Response: { code, data: CommissionConfig[] }
+ */
 router.get('/commission-configs', async (req, res) => {
   try {
     const configs = await CommissionConfig.findAll({
@@ -856,6 +1036,12 @@ router.get('/commission-configs', async (req, res) => {
   }
 })
 
+/**
+ * PUT /api/v1/admin/commission-configs/:id
+ * Update a commission rate. Records the change in commission history and clears the cache.
+ * Body: { commission_rate, remark? }
+ * Response: { code, message }
+ */
 router.put('/commission-configs/:id', async (req, res) => {
   try {
     const { commission_rate, remark } = req.body
@@ -885,6 +1071,12 @@ router.put('/commission-configs/:id', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/commission-history
+ * Get commission rate change history with filters and pagination.
+ * Query: { market_type?, trade_type?, start_date?, end_date?, page?, pageSize? }
+ * Response: { code, data: { list: CommissionHistory[], total } }
+ */
 router.get('/commission-history', async (req, res) => {
   try {
     const { market_type, trade_type, start_date, end_date, page = 1, pageSize = 10 } = req.query
@@ -909,6 +1101,11 @@ router.get('/commission-history', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/market-config
+ * Get market configuration (trading hours, refresh time) for all market types.
+ * Response: { code, data: MarketConfig[] }
+ */
 router.get('/market-config', async (req, res) => {
   try {
     const configs = await MarketConfig.findAll()
@@ -918,6 +1115,12 @@ router.get('/market-config', async (req, res) => {
   }
 })
 
+/**
+ * PUT /api/v1/admin/market-config/:id
+ * Update market configuration (refresh_time, trade_start, trade_end, enabled).
+ * Body: { refresh_time?, trade_start?, trade_end?, enabled? }
+ * Response: { code, message }
+ */
 router.put('/market-config/:id', async (req, res) => {
   try {
     const { refresh_time, trade_start, trade_end, enabled } = req.body
@@ -933,6 +1136,12 @@ router.put('/market-config/:id', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/statistics/groups
+ * Get group performance statistics (total assets, profit, profit rate) sorted by profit.
+ * Query: { start_date?, end_date?, period? ('week' | 'month') }
+ * Response: { code, data: Array<{ group_id, group_name, total_assets, profit, profit_rate, rank }> }
+ */
 router.get('/statistics/groups', async (req, res) => {
   try {
     const { start_date, end_date, period } = req.query
@@ -995,6 +1204,13 @@ router.get('/statistics/groups', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/admin/statistics/users
+ * Get user activity statistics (trade count, login count, total profit) sorted by
+ * trade count or login count.
+ * Query: { start_date?, end_date?, sort? ('trade_count' | 'login_count') }
+ * Response: { code, data: Array<{ user_id, username, trade_count, login_count, total_profit }> }
+ */
 router.get('/statistics/users', async (req, res) => {
   try {
     const { start_date, end_date, sort = 'trade_count' } = req.query
@@ -1035,6 +1251,12 @@ router.get('/statistics/users', async (req, res) => {
   }
 })
 
+/**
+ * POST /api/v1/admin/stocks/refresh
+ * Trigger a refresh of stock prices for a given market type (placeholder - not yet implemented).
+ * Body: { market_type? }
+ * Response: { code, message }
+ */
 router.post('/stocks/refresh', async (req, res) => {
   try {
     const { market_type } = req.body

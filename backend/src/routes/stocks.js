@@ -1,3 +1,13 @@
+/**
+ * File: stocks.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Stock information routes. Provides stock pool listing, real-time quotes,
+ *   historical K-line data, batch quotes, and commission rate configuration retrieval.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const express = require('express')
 const { StockPool, StockPrice, StockPricesCache, sequelize, CommissionConfig } = require('../models')
 const auth = require('../utils/auth')
@@ -5,6 +15,12 @@ const stockService = require('../services/stock')
 
 const router = express.Router()
 
+/**
+ * GET /api/v1/stocks
+ * List stocks from the stock pool with optional filtering by market_type and keyword search.
+ * Query: { market_type?, page?, pageSize?, keyword? }
+ * Response: { code, data: { list: StockPool[], total } }
+ */
 router.get('/', auth, async (req, res) => {
   try {
     const { market_type, page = 1, pageSize = 20, keyword } = req.query
@@ -25,6 +41,12 @@ router.get('/', auth, async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/stocks/:stockCode/quote
+ * Get a real-time stock quote. Requires market_type query parameter.
+ * Query: { market_type }
+ * Response: { code, data: { stockCode, stockName, price, ... } }
+ */
 router.get('/:stockCode/quote', auth, async (req, res) => {
   try {
     const { stockCode } = req.params
@@ -41,6 +63,12 @@ router.get('/:stockCode/quote', auth, async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/stocks/:stockCode/history
+ * Get historical K-line data. Supports date filtering and optional db source.
+ * Query: { market_type, start_date?, end_date?, source? }
+ * Response: { code, data: Array<{ tradeDate, openPrice, highPrice, lowPrice, closePrice, volume }> }
+ */
 router.get('/:stockCode/history', auth, async (req, res) => {
   try {
     const { stockCode } = req.params
@@ -79,6 +107,12 @@ router.get('/:stockCode/history', auth, async (req, res) => {
   }
 })
 
+/**
+ * POST /api/v1/stocks/quotes
+ * Get quotes for multiple stocks in one request.
+ * Body: { stocks: Array<{ stock_code, market_type }> }
+ * Response: { code, data: Array<quote objects> }
+ */
 router.post('/quotes', auth, async (req, res) => {
   try {
     const { stocks } = req.body
@@ -93,6 +127,11 @@ router.post('/quotes', auth, async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/stocks/commission-configs
+ * Get all commission rate configurations (public, no auth required).
+ * Response: { code, data: CommissionConfig[] }
+ */
 router.get('/commission-configs', async (req, res) => {
   try {
     const configs = await CommissionConfig.findAll()

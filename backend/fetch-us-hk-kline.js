@@ -1,13 +1,36 @@
+/**
+ * File: fetch-us-hk-kline.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Downloads US and Hong Kong stock K-line data via a Python
+ *              yfinance script and stores it in the local database.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const { spawn } = require('child_process')
 const mysql = require('mysql2/promise')
 
 const PYTHON_PATH = 'python3'
 const SCRIPT_PATH = './fetch-kline-yfinance.py'
 
+/**
+ * Creates a promise-based delay.
+ * @param {number} ms - Milliseconds to delay
+ * @returns {Promise<void>}
+ */
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+/**
+ * Runs the yfinance Python script to fetch K-line data for a given stock symbol.
+ * @param {Object} args - Arguments object
+ * @param {string} args.symbol - Stock symbol (e.g., "AAPL")
+ * @param {number} args.market_type - Market type (2=HK, 3=US)
+ * @param {string} [args.stock_name] - Optional stock name
+ * @returns {Promise<Array>} Parsed K-line data array from Python output
+ */
 async function runPython(script, args) {
   return new Promise((resolve, reject) => {
     const jsonArgs = JSON.stringify(args)
@@ -44,6 +67,11 @@ print(json.dumps(result))
   })
 }
 
+/**
+ * Main entry point. Fetches US and HK stock lists, downloads K-line data,
+ * and inserts into the stock_prices table.
+ * @returns {Promise<void>}
+ */
 async function main() {
   const connection = await mysql.createConnection({
     host: 'localhost',

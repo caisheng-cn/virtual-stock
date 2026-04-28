@@ -1,3 +1,13 @@
+/**
+ * File: groups.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Group management routes. Supports listing all groups, user's groups,
+ *   group details, join/leave operations, group ranking, and member asset details.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const express = require('express')
 const { Group, UserGroup, User, UserBalance, Position, StockPricesCache, Transaction, sequelize } = require('../models')
 const { Op } = require('sequelize')
@@ -5,6 +15,12 @@ const auth = require('../utils/auth')
 
 const router = express.Router()
 
+/**
+ * GET /api/v1/groups
+ * List all groups with optional status filter. Includes member count for each group.
+ * Query: { page?, pageSize?, status? }
+ * Response: { code, data: { list: Group[], total } }
+ */
 router.get('/', auth, async (req, res) => {
   try {
     const { page = 1, pageSize = 10, status } = req.query
@@ -28,6 +44,11 @@ router.get('/', auth, async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/groups/my
+ * List all groups the authenticated user is a member of.
+ * Response: { code, data: Array<{ groupId, groupName, description, initCash, currency, memberCount }> }
+ */
 router.get('/my', auth, async (req, res) => {
   try {
     const userGroups = await UserGroup.findAll({ where: { user_id: req.userId } })
@@ -60,6 +81,11 @@ router.get('/my', auth, async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/groups/:id
+ * Get a single group's details by ID. Includes member count.
+ * Response: { code, data: Group }
+ */
 router.get('/:id', auth, async (req, res) => {
   try {
     const group = await Group.findByPk(req.params.id)
@@ -74,6 +100,12 @@ router.get('/:id', auth, async (req, res) => {
   }
 })
 
+/**
+ * POST /api/v1/groups/join
+ * Join a group. The user must not already be a member of the target group.
+ * Body: { group_id }
+ * Response: { code, message }
+ */
 router.post('/join', auth, async (req, res) => {
   try {
     const { group_id } = req.body
@@ -99,6 +131,12 @@ router.post('/join', auth, async (req, res) => {
   }
 })
 
+/**
+ * POST /api/v1/groups/leave
+ * Leave a group. Removes the UserGroup membership record.
+ * Body: { group_id }
+ * Response: { code, message }
+ */
 router.post('/leave', auth, async (req, res) => {
   try {
     const { group_id } = req.body
@@ -114,6 +152,12 @@ router.post('/leave', auth, async (req, res) => {
   }
 })
 
+/**
+ * Calculate a member's total assets, cash, market value, and profit within a group.
+ * @param {number} userId - The user ID
+ * @param {number} groupId - The group ID
+ * @returns {Promise<{cash: number, initCash: number, totalMarketValue: number, totalAssets: number, profit: number, profitRate: number}>}
+ */
 async function getMemberAssets(userId, groupId) {
   const balance = await UserBalance.findOne({ where: { user_id: userId, group_id: groupId } })
   const cash = balance ? parseFloat(balance.cash) : 0
@@ -135,6 +179,11 @@ async function getMemberAssets(userId, groupId) {
   return { cash, initCash, totalMarketValue, totalAssets, profit, profitRate }
 }
 
+/**
+ * GET /api/v1/groups/:groupId/ranking
+ * Get the profit ranking for all members in a group. Sorted by total assets descending.
+ * Response: { code, data: Array<{ userId, nickname, rank, totalAssets, profit, profitRate }> }
+ */
 router.get('/:groupId/ranking', auth, async (req, res) => {
   try {
     const { groupId } = req.params
@@ -168,6 +217,13 @@ router.get('/:groupId/ranking', auth, async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/groups/:groupId/members/:userId/details
+ * Get detailed information about a specific group member, including balance, positions,
+ * and recent transactions.
+ * Query: { page?, pageSize? }
+ * Response: { code, data: { userId, nickname, balance, positions, transactions, totalTransactions } }
+ */
 router.get('/:groupId/members/:userId/details', auth, async (req, res) => {
   try {
     const { groupId, userId } = req.params

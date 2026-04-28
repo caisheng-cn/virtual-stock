@@ -32,6 +32,15 @@
 </template>
 
 <script setup>
+/**
+ * File: About.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: About page displaying version info, copyright, and a changelog
+ *   timeline fetched from the server API.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -43,6 +52,11 @@ const version = ref('')
 const copyright = ref('')
 const changelog = ref([])
 
+/**
+ * fetchAbout
+ * Description: Fetches version, copyright, and changelog information from the API.
+ * @returns {Promise<void>}
+ */
 const fetchAbout = async () => {
   try {
     const res = await getVersion()

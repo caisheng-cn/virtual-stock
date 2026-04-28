@@ -56,6 +56,16 @@
 </template>
 
 <script setup>
+/**
+ * File: FundFlow.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Fund flow page displaying a table of financial records with date
+ *   range filter. Shows initial fund, buy/sell transactions, dividends, and
+ *   allotments with change amounts.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -72,11 +82,23 @@ const defaultStart = oneMonthAgo.toISOString().split('T')[0]
 const today = new Date().toISOString().split('T')[0]
 dateRange.value = [defaultStart, today]
 
+/**
+ * getTagType
+ * Description: Returns the Element Plus tag type for a given fund flow row.
+ * @param {Object} row - The fund flow row object
+ * @returns {string} The tag type string
+ */
 const getTagType = (row) => {
   const map = { 5: 'success', 1: 'danger', 2: 'success', 3: 'warning', 4: 'info' }
   return map[row.tradeType] || ''
 }
 
+/**
+ * getTypeLabel
+ * Description: Returns the display label for a given fund flow type.
+ * @param {string} label - The type label key
+ * @returns {string} The localized type label
+ */
 const getTypeLabel = (label) => {
   const labels = {
     initial_fund: t('fund_flow.initial_fund'),
@@ -89,11 +111,22 @@ const getTypeLabel = (label) => {
   return labels[label] || label
 }
 
+/**
+ * formatMoney
+ * Description: Formats a numeric value as a comma-separated string with two decimal places.
+ * @param {number} value - The numeric value to format
+ * @returns {string} The formatted money string
+ */
 const formatMoney = (value) => {
   if (!value && value !== 0) return '0.00'
   return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
+/**
+ * fetchFundFlow
+ * Description: Fetches fund flow records with optional date range parameters.
+ * @returns {Promise<void>}
+ */
 const fetchFundFlow = async () => {
   try {
     const params = {}

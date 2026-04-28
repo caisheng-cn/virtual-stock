@@ -21,6 +21,15 @@
 </template>
 
 <script setup>
+/**
+ * File: admin-login.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Admin login page with username/password form. Uses adminLogin API,
+ *   stores adminToken in localStorage, and redirects to /admin.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -42,6 +51,12 @@ const rules = {
   password: [{ required: true, message: t('auth.password_rule'), trigger: 'blur' }]
 }
 
+/**
+ * handleLogin
+ * Description: Validates the admin login form, calls the adminLogin API, stores
+ *   admin token and ID in localStorage, and navigates to the admin dashboard.
+ * @returns {Promise<void>}
+ */
 const handleLogin = async () => {
   await formRef.value.validate(async (valid) => {
     if (!valid) return

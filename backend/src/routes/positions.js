@@ -1,3 +1,13 @@
+/**
+ * File: positions.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: User position routes. Lists all positions (holdings) for the authenticated
+ *   user with current market value, floating profit/loss, and currency conversion.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const express = require('express')
 const { Position, UserBalance, StockPool, sequelize } = require('../models')
 const { Op } = require('sequelize')
@@ -7,6 +17,13 @@ const { toCNY, fromCNY, getCurrencySymbol } = require('../utils/currency')
 
 const router = express.Router()
 
+/**
+ * GET /api/v1/positions
+ * List all positions (holdings) for the authenticated user with current market values.
+ * Each position includes floating profit/loss, currency symbol, and cost basis in both
+ * original and CNY denominations.
+ * Response: { code, data: Array<{ stockCode, stockName, shares, avgCost, currentPrice, marketValue, floatingProfit, ... }> }
+ */
 router.get('/', auth, async (req, res) => {
   try {
     const hasCreatedAt = await checkColumnExists('positions', 'created_at')
@@ -95,6 +112,12 @@ router.get('/', auth, async (req, res) => {
   }
 })
 
+/**
+ * Check whether a column exists in a database table by attempting a SELECT query.
+ * @param {string} table - The table name
+ * @param {string} column - The column name
+ * @returns {Promise<boolean>} True if the column exists
+ */
 async function checkColumnExists(table, column) {
   try {
     const [results] = await sequelize.query(`SELECT ${column} FROM ${table} LIMIT 1`)

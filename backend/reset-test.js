@@ -1,6 +1,20 @@
+/**
+ * File: reset-test.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Resets test user data by deleting transactions and positions,
+ *              then resetting the cash balance to its initial value.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const { sequelize, User, UserBalance, Position, Transaction } = require('./src/models')
 const { QueryTypes } = require('sequelize')
 
+/**
+ * Resets the test user's data (transactions, positions, balance) to initial state.
+ * @returns {Promise<void>}
+ */
 async function resetTestUser() {
   try {
     await sequelize.authenticate()

@@ -1,3 +1,13 @@
+/**
+ * File: statistics.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: User statistics routes. Provides profit analysis (floating vs realized),
+ *   position summary statistics, and trade activity overview for the authenticated user.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const express = require('express')
 const { Transaction, UserBalance, Position, Group, sequelize } = require('../models')
 const { Op } = require('sequelize')
@@ -7,6 +17,12 @@ const { toCNY } = require('../utils/currency')
 const router = express.Router()
 const INIT_CASH = 7000000
 
+/**
+ * GET /api/v1/statistics/profit
+ * Get profit statistics: floating profit/loss from current positions and realized
+ * profit from closed trades.
+ * Response: { code, data: { period, floatingProfit, floatingProfitRate, realizedProfit, positionCount } }
+ */
 router.get('/profit', auth, async (req, res) => {
   try {
     const balance = await UserBalance.findOne({ where: { user_id: req.userId } })
@@ -59,6 +75,12 @@ router.get('/profit', auth, async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/statistics/positions
+ * Get summary statistics for all current positions: total market value, total cost,
+ * floating profit, and position count.
+ * Response: { code, data: { totalMarketValue, totalPositionCost, floatingProfit, floatingProfitRate, positionCount } }
+ */
 router.get('/positions', auth, async (req, res) => {
   try {
     const positions = await Position.findAll({ where: { user_id: req.userId, shares: { [Op.gt]: 0 } } })
@@ -98,6 +120,11 @@ router.get('/positions', auth, async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/statistics/trades
+ * Get trade activity statistics: total trades, buy/sell breakdown, and total turnover.
+ * Response: { code, data: { totalTrades, buyTrades, sellTrades, totalAmount } }
+ */
 router.get('/trades', auth, async (req, res) => {
   try {
     const where = { user_id: req.userId }

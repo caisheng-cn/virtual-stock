@@ -1,3 +1,14 @@
+/**
+ * File: stock.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Stock quote and history service. Fetches real-time quotes and K-line data
+ *   from Sina Finance (A-shares) or via Python yfinance script (HK/US stocks). Results
+ *   are cached in the StockPricesCache table to reduce external API calls.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const axios = require('axios')
 const { spawn } = require('child_process')
 const path = require('path')
@@ -7,6 +18,14 @@ const SINA_REFERER = 'http://finance.sina.com.cn'
 
 const BASE_DIR = path.resolve(__dirname, '../../')
 
+/**
+ * Run a Python subprocess to fetch stock data via yfinance
+ * @param {string} action - 'quote' or 'kline'
+ * @param {string} symbol - Stock symbol (e.g., 'AAPL', '0700.HK')
+ * @param {number} marketType - Market type: 2 (HK), 3 (US)
+ * @returns {Promise<Object>} Parsed JSON result from the Python script
+ * @throws {Error} If the Python process fails or output cannot be parsed
+ */
 function runPythonFetch(action, symbol, marketType) {
   return new Promise((resolve, reject) => {
     const { spawn } = require('child_process')
@@ -50,6 +69,13 @@ print(json.dumps(result))
   })
 }
 
+/**
+ * Fetch a real-time A-share quote from Sina Finance API
+ * @param {string} code - Stock code (e.g., '600000')
+ * @returns {Promise<Object>} Quote object with stockCode, stockName, price, openPrice,
+ *   prevClose, highPrice, lowPrice, volume, amount, tradeDate, tradeTime
+ * @throws {Error} If the API request fails or data cannot be parsed
+ */
 async function getAStockQuote(code) {
   const url = `http://hq.sinajs.cn/list=sh${code}`
   const response = await axios.get(url, { headers: { Referer: SINA_REFERER } })
@@ -74,6 +100,12 @@ async function getAStockQuote(code) {
   }
 }
 
+/**
+ * Fetch a real-time HK stock quote via Python yfinance
+ * @param {string} code - Stock symbol (e.g., '0700.HK')
+ * @returns {Promise<Object>} Quote object with stockCode, stockName, price, etc.
+ * @throws {Error} If the Python fetch fails
+ */
 async function getHKStockQuote(code) {
   try {
     const data = await runPythonFetch('quote', code, 2)
@@ -96,6 +128,12 @@ async function getHKStockQuote(code) {
   }
 }
 
+/**
+ * Fetch a real-time US stock quote via Python yfinance
+ * @param {string} code - Stock symbol (e.g., 'AAPL')
+ * @returns {Promise<Object>} Quote object with stockCode, stockName, price, etc.
+ * @throws {Error} If the Python fetch fails
+ */
 async function getUSStockQuote(code) {
   try {
     const data = await runPythonFetch('quote', code, 3)
@@ -117,6 +155,13 @@ async function getUSStockQuote(code) {
   }
 }
 
+/**
+ * Route a quote request to the correct data source based on market type
+ * @param {string} code - Stock code or symbol
+ * @param {number} marketType - Market type: 1 (A-share), 2 (HK), 3 (US)
+ * @returns {Promise<Object>} Quote object from the appropriate source
+ * @throws {Error} If market type is unsupported or the fetch fails
+ */
 async function fetchQuoteFromAPI(code, marketType) {
   if (marketType == 1) return getAStockQuote(code)
   if (marketType == 2) return getHKStockQuote(code)
@@ -124,6 +169,16 @@ async function fetchQuoteFromAPI(code, marketType) {
   throw new Error('不支持的市场类型')
 }
 
+/**
+ * Get a stock quote with a cache-first strategy.
+ * Returns the cached quote if available for today. Otherwise fetches from the external
+ * API, saves to both the cache table and history table, then returns the fresh quote.
+ * Falls back to cache if the API call fails.
+ * @param {string} code - Stock code or symbol
+ * @param {number} marketType - Market type: 1 (A-share), 2 (HK), 3 (US)
+ * @returns {Promise<Object>} Quote object, possibly with fromCache / fallback flags
+ * @throws {Error} If both API and cache fail
+ */
 async function getQuote(code, marketType) {
   const today = new Date().toISOString().split('T')[0]
   
@@ -205,6 +260,17 @@ async function getQuote(code, marketType) {
   }
 }
 
+/**
+ * Get historical K-line data for a stock.
+ * For A-shares, fetches from Sina Finance API. For HK/US stocks, uses Python yfinance.
+ * Supports optional date filtering by startDate / endDate.
+ * @param {string} code - Stock code or symbol
+ * @param {number} marketType - Market type: 1 (A-share), 2 (HK), 3 (US)
+ * @param {string} [startDate] - Start date in YYYY-MM-DD format
+ * @param {string} [endDate] - End date in YYYY-MM-DD format
+ * @returns {Promise<Array<Object>>} Array of K-line entries with tradeDate, openPrice,
+ *   highPrice, lowPrice, closePrice, volume
+ */
 async function getHistory(code, marketType, startDate, endDate) {
   if (marketType == 1) {
     const url = `http://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=sh${code}&scale=240&ma=no&datalen=365`
@@ -263,6 +329,13 @@ async function getHistory(code, marketType, startDate, endDate) {
   return []
 }
 
+/**
+ * Get quotes for multiple stocks sequentially.
+ * Each stock object must have stock_code and market_type properties.
+ * Errors for individual stocks are returned inline (not thrown).
+ * @param {Array<{stock_code: string, market_type: number}>} stocks - Array of stock descriptors
+ * @returns {Promise<Array<Object>>} Array of quote objects; failed entries have an error property
+ */
 async function getBatchQuotes(stocks) {
   const results = []
   for (const s of stocks) {

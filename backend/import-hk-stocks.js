@@ -1,3 +1,14 @@
+/**
+ * File: import-hk-stocks.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Imports Hong Kong stock list and K-line data. Parses HKEX stock
+ *              list via Python script, imports into stock_pools, then downloads
+ *              missing K-line data using yfinance with concurrent workers.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const mysql = require('mysql2/promise');
 const { spawn } = require('child_process');
 const path = require('path');
@@ -6,6 +17,11 @@ const SOCKET_PATH = '/var/run/mysqld/mysqld.sock';
 const BASE_DIR = __dirname;
 const CONCURRENCY = 8;
 
+/**
+ * Runs a Python yfinance script to fetch K-line data for a HK stock symbol.
+ * @param {string} symbol - Hong Kong stock code (e.g., "00700")
+ * @returns {Promise<Array>} Parsed K-line data array
+ */
 function runPythonFetch(symbol) {
   return new Promise((resolve, reject) => {
     const args = JSON.stringify({ symbol, market_type: 2, period: '1y' });
@@ -29,6 +45,11 @@ print(json.dumps(result))
   });
 }
 
+/**
+ * Main entry point. Parses HK stock list, imports to stock_pools, and downloads
+ * K-line data for stocks missing price data.
+ * @returns {Promise<void>}
+ */
 async function main() {
   console.log('=== 港股数据导入 ===\n');
 
@@ -82,6 +103,10 @@ async function main() {
   let totalFailed = 0;
   let done = 0;
 
+  /**
+   * Concurrent worker that fetches K-line data for a single HK stock.
+   * @returns {Promise<void>}
+   */
   async function worker() {
     while (true) {
       const i = done++;

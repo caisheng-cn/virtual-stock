@@ -1,5 +1,19 @@
+/**
+ * File: list_users.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Lists all users from the database along with their group
+ *              memberships in a formatted console table.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const { sequelize } = require('./src/models');
 
+/**
+ * Queries and prints all users with their associated groups and join dates.
+ * @returns {Promise<void>}
+ */
 async function listUsers() {
   try {
     console.log('=== 用户及所属群组列表 ===\n');

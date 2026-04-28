@@ -1,3 +1,14 @@
+/**
+ * File: index.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Internationalization (i18n) module. Loads locale JSON files, provides
+ *   a translation function (t) and Express middleware that detects the user's language
+ *   from the Accept-Language header or user preference.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const fs = require('fs');
 const path = require('path');
 

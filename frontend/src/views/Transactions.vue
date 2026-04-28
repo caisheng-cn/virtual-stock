@@ -86,6 +86,15 @@
 </template>
 
 <script setup>
+/**
+ * File: Transactions.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Transaction history page with date range filter, account balance
+ *   card, and a table showing market/stock/price/shares/amount/commission details.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -104,30 +113,64 @@ const defaultStart = threeWeeksAgo.toISOString().split('T')[0]
 const today = new Date().toISOString().split('T')[0]
 dateRange.value = [defaultStart, today]
 
+/**
+ * getMarketLabel
+ * Description: Returns the display label for a given market type.
+ * @param {number} marketType - The market type (1=A, 2=HK, 3=US)
+ * @returns {string} The market label string
+ */
 const getMarketLabel = (marketType) => {
   const labels = { 1: t('market.a_share'), 2: t('market.hk_stock'), 3: t('market.us_stock') }
   return labels[marketType] || t('common.unknown')
 }
 
+/**
+ * formatMoney
+ * Description: Formats a numeric value as a comma-separated string with two decimal places.
+ * @param {number} value - The numeric value to format
+ * @returns {string} The formatted money string
+ */
 const formatMoney = (value) => {
   if (!value && value !== 0) return '0.00'
   return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
+/**
+ * formatNumber
+ * Description: Formats a numeric value with comma separators for thousands.
+ * @param {number} value - The numeric value to format
+ * @returns {string} The formatted number string
+ */
 const formatNumber = (value) => {
   if (!value && value !== 0) return '0'
   return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
+/**
+ * formatCommissionRate
+ * Description: Formats a commission rate value as a per-mille string.
+ * @param {number|string} rate - The commission rate value
+ * @returns {string} The formatted rate string (e.g. "0.5‰")
+ */
 const formatCommissionRate = (rate) => {
   if (rate === undefined || rate === null || rate === '') return '-'
   return parseFloat(rate).toFixed(1) + '‰'
 }
 
+/**
+ * handleDateChange
+ * Description: Re-fetches transactions when the date range filter is changed.
+ * @returns {void}
+ */
 const handleDateChange = () => {
   fetchTransactions()
 }
 
+/**
+ * fetchTransactions
+ * Description: Fetches transaction records with optional date range parameters.
+ * @returns {Promise<void>}
+ */
 const fetchTransactions = async () => {
   try {
     const params = {}

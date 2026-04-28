@@ -1,3 +1,13 @@
+/**
+ * File: users.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: User authentication and profile routes. Handles registration (with invite
+ *   code validation), login (with JWT token generation), and profile retrieval/update.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const express = require('express')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
@@ -6,6 +16,13 @@ const { User, UserGroup, Group, UserBalance, InviteCode, LoginHistory, Transacti
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'virtual-stock-secret-key-2024'
 
+/**
+ * POST /api/v1/users/register
+ * Register a new user account. Requires a valid invite code linked to a group.
+ * Creates the user record, initial balance, and an initial fund transaction.
+ * Body: { username, password, nickname?, invite_code, language? }
+ * Response: { code, message, data: { userId, username, nickname } }
+ */
 router.post('/register', async (req, res) => {
    try {
      const { username, password, nickname, invite_code, language } = req.body
@@ -86,6 +103,12 @@ router.post('/register', async (req, res) => {
    }
  })
 
+/**
+ * POST /api/v1/users/login
+ * Authenticate a user and return a JWT token. Records login history.
+ * Body: { username, password }
+ * Response: { code, message, data: { token, userId, username, nickname, language, isAdmin } }
+ */
 router.post('/login', async (req, res) => {
    try {
      const { username, password } = req.body
@@ -128,6 +151,11 @@ router.post('/login', async (req, res) => {
    }
  })
 
+/**
+ * GET /api/v1/users/info
+ * Get the authenticated user's profile information. Requires JWT auth.
+ * Response: { code, message, data: { id, username, nickname, email, phone, status, language, created_at } }
+ */
 router.get('/info', require('../utils/auth'), async (req, res) => {
    try {
      const user = await User.findByPk(req.userId, { attributes: ['id', 'username', 'nickname', 'email', 'phone', 'status', 'language', 'created_at'] })
@@ -137,6 +165,12 @@ router.get('/info', require('../utils/auth'), async (req, res) => {
    }
  })
 
+/**
+ * PUT /api/v1/users/info
+ * Update the authenticated user's profile (nickname, email, phone, language). Requires JWT auth.
+ * Body: { nickname?, email?, phone?, language? }
+ * Response: { code, message }
+ */
 router.put('/info', require('../utils/auth'), async (req, res) => {
    try {
      const { nickname, email, phone, language } = req.body

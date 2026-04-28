@@ -1,3 +1,14 @@
+/**
+ * File: transactions.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Transaction history and fund flow routes. Lists user's trade records
+ *   with filtering by date, stock code, and trade type. Also provides fund flow analysis
+ *   showing deposits, buy/sell amounts, dividends, and allotments.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const express = require('express')
 const { Transaction, StockPool, UserBalance, sequelize, CommissionConfig } = require('../models')
 const { Op } = require('sequelize')
@@ -6,6 +17,13 @@ const { toCNY, getCurrencySymbol } = require('../utils/currency')
 
 const router = express.Router()
 
+/**
+ * GET /api/v1/transactions
+ * Get the authenticated user's transaction history with date/trade-type/stock-code filters.
+ * Defaults to the last 21 days. Includes current balance and commission rates.
+ * Query: { stock_code?, start_date?, end_date?, trade_type?, page?, pageSize? }
+ * Response: { code, data: { currentBalance, totalCost, list: Transaction[], total } }
+ */
 router.get('/', auth, async (req, res) => {
   try {
     const { stock_code, start_date, end_date, trade_type, page = 1, pageSize = 50 } = req.query
@@ -119,6 +137,13 @@ router.get('/', auth, async (req, res) => {
   }
 })
 
+/**
+ * GET /api/v1/transactions/fund-flow
+ * Get fund flow analysis showing deposits, buy/sell amounts, dividends, and allotments
+ * within a date range (defaults to last month).
+ * Query: { start_date?, end_date? }
+ * Response: { code, data: { list: Array<{ tradeDate, tradeType, typeLabel, changeAmount, balanceAfter, ... }> } }
+ */
 router.get('/fund-flow', auth, async (req, res) => {
   try {
     const { start_date, end_date } = req.query

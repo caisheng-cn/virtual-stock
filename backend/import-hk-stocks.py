@@ -1,3 +1,13 @@
+#
+# File: import-hk-stocks.py
+# Created: 2024-01-01
+# Author: CAISHENG <caisheng.cn@gmail.com>
+# Description: Fetches HK stock list from Sina via akshare, imports into stock_pools table,
+#              then fetches daily K-line data for the past year and inserts into stock_prices.
+# Version History:
+#   1.0 - Initial version with full HK stock data import pipeline
+#
+
 import akshare as ak
 import pymysql
 import json

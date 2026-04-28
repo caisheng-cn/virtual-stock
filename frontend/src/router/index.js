@@ -1,3 +1,14 @@
+/**
+ * File: index.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Vue Router configuration with routes for user authentication, trading, positions,
+ *              statistics, transactions, groups, fund flow, and admin panel. Includes navigation
+ *              guards for authentication and admin access.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [

@@ -1,3 +1,13 @@
+/**
+ * File: messages.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Group message routes. Provides message listing (with pagination and user
+ *   details), like/unlike toggling, reply creation, and unread message counting.
+ * Version History:
+ *   v1.0 - Initial version
+ */
+
 const express = require('express')
 const { GroupMessage, MessageLike, MessageReply, User, UserGroup, sequelize } = require('../models')
 const auth = require('../utils/auth')
@@ -5,7 +15,13 @@ const { Op } = require('sequelize')
 
 const router = express.Router()
 
-// Get messages for a group (paginated, time-filtered)
+/**
+ * GET /api/v1/messages/:groupId
+ * Get paginated messages for a group with user details, likes, and replies.
+ * Updates the user's last_read_message_id for the group.
+ * Query: { page?, pageSize?, start_date?, end_date? }
+ * Response: { code, data: { list: GroupMessage[], total } }
+ */
 router.get('/:groupId', auth, async (req, res) => {
   try {
     const { groupId } = req.params
@@ -87,7 +103,11 @@ router.get('/:groupId', auth, async (req, res) => {
   }
 })
 
-// Toggle like on a message
+/**
+ * POST /api/v1/messages/:messageId/like
+ * Toggle like/unlike on a group message.
+ * Response: { code, data: { liked: boolean } }
+ */
 router.post('/:messageId/like', auth, async (req, res) => {
   try {
     const { messageId } = req.params
@@ -104,7 +124,12 @@ router.post('/:messageId/like', auth, async (req, res) => {
   }
 })
 
-// Reply to a message
+/**
+ * POST /api/v1/messages/:messageId/reply
+ * Reply to a group message.
+ * Body: { content }
+ * Response: { code, data: { id, created_at } }
+ */
 router.post('/:messageId/reply', auth, async (req, res) => {
   try {
     const { messageId } = req.params
@@ -123,7 +148,11 @@ router.post('/:messageId/reply', auth, async (req, res) => {
   }
 })
 
-// Get unread message count for the current user (across all their groups)
+/**
+ * GET /api/v1/messages/unread/count
+ * Get the total count of unread messages across all groups the user belongs to.
+ * Response: { code, data: number }
+ */
 router.get('/unread/count', auth, async (req, res) => {
   try {
     const userGroups = await UserGroup.findAll({ where: { user_id: req.userId } })

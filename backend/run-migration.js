@@ -1,6 +1,20 @@
+/**
+ * File: run-migration.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Reads and executes SQL migration statements from an external
+ *              file (migration-admin.sql) against the database sequentially.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const mysql = require('mysql2/promise')
 const fs = require('fs')
 
+/**
+ * Reads migration-admin.sql, splits by semicolons, and executes each statement.
+ * @returns {Promise<void>}
+ */
 async function runMigration() {
   const config = {
     host: process.env.DB_HOST || 'localhost',

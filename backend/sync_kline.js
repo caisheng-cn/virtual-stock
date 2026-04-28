@@ -1,13 +1,36 @@
+/**
+ * File: sync_kline.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Syncs US and Hong Kong stock daily K-line data from yfinance
+ *              to the local stock_prices database table.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const mysql = require('mysql2/promise');
 const { spawn } = require('child_process');
 
 const BASE_DIR = '/mnt/c/CAISHENG/Code/virtual-stock/backend';
 const DELAY_MS = 1500;
 
+/**
+ * Creates a promise-based delay.
+ * @param {number} ms - Milliseconds to delay
+ * @returns {Promise<void>}
+ */
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * Spawns a Python process to fetch K-line data via yfinance.
+ * @param {Object} args - Arguments including symbol, market_type, period
+ * @param {string} args.symbol - Stock symbol
+ * @param {number} args.market_type - Market type (2=HK, 3=US)
+ * @param {string} [args.period] - Data period (e.g., "1y")
+ * @returns {Promise<Array>} Parsed K-line data array
+ */
 function runPythonFetch(args) {
   return new Promise((resolve, reject) => {
     const jsonArgs = JSON.stringify(args);
@@ -39,6 +62,10 @@ print(json.dumps(result))
   });
 }
 
+/**
+ * Main entry point. Syncs daily K-line data for all US and HK stocks.
+ * @returns {Promise<void>}
+ */
 async function main() {
   const conn = await mysql.createConnection({
     user: 'root',

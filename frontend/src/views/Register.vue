@@ -27,6 +27,15 @@
 </template>
 
 <script setup>
+/**
+ * File: Register.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: User registration page with username, password, nickname, and
+ *   invite code fields. Calls the register API and redirects to /login on success.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -51,6 +60,12 @@ const rules = {
   inviteCode: [{ required: true, message: t('auth.invite_code_rule'), trigger: 'blur' }]
 }
 
+/**
+ * handleRegister
+ * Description: Validates the registration form, calls the register API with form data,
+ *   and navigates to the login page upon successful registration.
+ * @returns {Promise<void>}
+ */
 const handleRegister = async () => {
   await formRef.value.validate(async (valid) => {
     if (!valid) return

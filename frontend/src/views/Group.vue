@@ -260,6 +260,16 @@
 </template>
 
 <script setup>
+/**
+ * File: Group.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Group ranking page showing member rankings with total assets/profit,
+ *   member detail view (balance/positions/transactions), and group messages with
+ *   like and reply functionality.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -285,11 +295,23 @@ const messagesLoading = ref(false)
 const messageDateRange = ref(null)
 const replyText = ref({})
 
+/**
+ * formatMoney
+ * Description: Formats a numeric value as a comma-separated string with two decimal places.
+ * @param {number} value - The numeric value to format
+ * @returns {string} The formatted money string
+ */
 const formatMoney = (value) => {
   if (!value && value !== 0) return '0.00'
   return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
+/**
+ * formatTime
+ * Description: Formats an ISO date string to a readable date-time format.
+ * @param {string} dateStr - The ISO date string to format
+ * @returns {string} The formatted date-time string
+ */
 const formatTime = (dateStr) => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
@@ -297,16 +319,34 @@ const formatTime = (dateStr) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/**
+ * getMessageTypeLabel
+ * Description: Returns the display label for a given message type.
+ * @param {number} type - The message type (1=buy, 2=sell, 3=dividend, 4=allotment)
+ * @returns {string} The message type label
+ */
 const getMessageTypeLabel = (type) => {
   const labels = { 1: t('trade_page.buy'), 2: t('trade_page.sell'), 3: t('group_page.dividend'), 4: t('group_page.allotment') }
   return labels[type] || '-'
 }
 
+/**
+ * getMessageTagType
+ * Description: Returns the Element Plus tag type for a given message type.
+ * @param {number} type - The message type
+ * @returns {string} The tag type (success/warning/primary/info)
+ */
 const getMessageTagType = (type) => {
   const types = { 1: 'success', 2: 'warning', 3: 'primary', 4: 'info' }
   return types[type] || ''
 }
 
+/**
+ * getMarketTypeLabel
+ * Description: Returns the display label for a given market type.
+ * @param {number} type - The market type (1=A, 2=HK, 3=US)
+ * @returns {string} The market label string
+ */
 const getMarketTypeLabel = (type) => {
   const labels = { 1: 'A股', 2: '港股', 3: '美股' }
   return labels[type] || '-'
@@ -321,6 +361,12 @@ onMounted(async () => {
   }
 })
 
+/**
+ * onGroupChange
+ * Description: Resets member selection and re-fetches ranking and messages
+ *   when the selected group changes.
+ * @returns {void}
+ */
 const onGroupChange = () => {
   selectedMember.value = null
   memberDetail.value = null
@@ -328,6 +374,11 @@ const onGroupChange = () => {
   fetchMessages(1)
 }
 
+/**
+ * fetchRanking
+ * Description: Fetches the member ranking list for the current group.
+ * @returns {Promise<void>}
+ */
 const fetchRanking = async () => {
   if (!currentGroup.value) return
   try {
@@ -338,6 +389,12 @@ const fetchRanking = async () => {
   }
 }
 
+/**
+ * fetchMemberDetail
+ * Description: Fetches detailed member information including balance, positions,
+ *   and transactions for the selected member.
+ * @returns {Promise<void>}
+ */
 const fetchMemberDetail = async () => {
   if (!selectedMember.value || !currentGroup.value) {
     memberDetail.value = null
@@ -354,6 +411,12 @@ const fetchMemberDetail = async () => {
   memberDetailLoading.value = false
 }
 
+/**
+ * fetchMessages
+ * Description: Fetches group messages with pagination and optional date range filter.
+ * @param {number} page - The page number to fetch
+ * @returns {Promise<void>}
+ */
 const fetchMessages = async (page) => {
   if (!currentGroup.value) return
   messagePage.value = page || 1
@@ -374,6 +437,12 @@ const fetchMessages = async (page) => {
   messagesLoading.value = false
 }
 
+/**
+ * handleLike
+ * Description: Toggles the like status for a group message.
+ * @param {Object} msg - The message object to like/unlike
+ * @returns {Promise<void>}
+ */
 const handleLike = async (msg) => {
   try {
     await toggleLike(msg.id)
@@ -384,6 +453,12 @@ const handleLike = async (msg) => {
   }
 }
 
+/**
+ * toggleReplies
+ * Description: Toggles the visibility of reply section for a group message.
+ * @param {Object} msg - The message object to toggle replies for
+ * @returns {void}
+ */
 const toggleReplies = (msg) => {
   msg.showReplies = !msg.showReplies
   if (msg.showReplies && !replyText.value[msg.id]) {
@@ -391,6 +466,12 @@ const toggleReplies = (msg) => {
   }
 }
 
+/**
+ * handleReply
+ * Description: Submits a reply to a group message and appends it to the local replies list.
+ * @param {Object} msg - The message object to reply to
+ * @returns {Promise<void>}
+ */
 const handleReply = async (msg) => {
   const text = replyText.value[msg.id]
   if (!text || !text.trim()) return

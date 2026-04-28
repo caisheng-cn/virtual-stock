@@ -1,6 +1,21 @@
+/**
+ * File: check-data.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Data integrity check utility. Queries user balance and positions,
+ *              sums total costs, and outputs results for verification.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const { UserBalance, Position } = require('./src/models')
 const { Op } = require('sequelize')
 
+/**
+ * Checks data integrity by fetching user balance and active positions,
+ * then summing position costs for verification.
+ * @returns {Promise<void>}
+ */
 async function check() {
   try {
     const balance = await UserBalance.findOne({ where: { user_id: 1 } })

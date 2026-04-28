@@ -21,6 +21,15 @@
 </template>
 
 <script setup>
+/**
+ * File: Login.vue
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: User login page with username/password form. Calls login API,
+ *   stores authentication token in localStorage, and redirects to /home or /admin.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -42,6 +51,12 @@ const rules = {
   password: [{ required: true, message: t('auth.password_rule'), trigger: 'blur' }]
 }
 
+/**
+ * handleLogin
+ * Description: Validates the login form, calls the login API, stores user credentials
+ *   in localStorage, and navigates to the appropriate page (home or admin).
+ * @returns {Promise<void>}
+ */
 const handleLogin = async () => {
   await formRef.value.validate(async (valid) => {
     if (!valid) return

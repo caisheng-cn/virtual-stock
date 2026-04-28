@@ -1,3 +1,13 @@
+#
+# File: fetch_kline_yfinance.py
+# Created: 2024-01-01
+# Author: CAISHENG <caisheng.cn@gmail.com>
+# Description: Fetches stock quotes and K-line (candlestick) data from Yahoo Finance (yfinance).
+#              Supports HK stocks (market_type=2) and US stocks (market_type=3).
+# Version History:
+#   1.0 - Initial version with fetch_quote and fetch_kline functions
+#
+
 import yfinance as yf
 import json
 import sys
@@ -5,18 +15,39 @@ import os
 
 os.environ['HOME'] = '/home/cai'
 
+
 def get_hk_code(code):
+    """Convert a HK stock code to Yahoo Finance format.
+
+    @param code: str - Raw HK stock code (e.g., "00700" or "700").
+    @return: str - Formatted code with ".HK" suffix (e.g., "0700.HK").
+    """
     code = code.lstrip('0')
     if len(code) < 4:
         code = code.zfill(4)
     return f"{code}.HK"
 
+
 def get_us_code(code):
+    """Return US stock code as-is for Yahoo Finance.
+
+    @param code: str - US stock ticker symbol (e.g., "AAPL" or "BRK.B").
+    @return: str - The same code, passed through unchanged.
+    """
     if '.' in code:
         return code
     return code
 
 def fetch_quote(symbol, market_type, max_retries=3):
+    """Fetch real-time quote data for a stock.
+
+    @param symbol: str - Stock code/symbol.
+    @param market_type: int - 2 for HK stocks, 3 for US stocks.
+    @param max_retries: int - Maximum retry attempts on failure (default 3).
+    @return: dict - Quote data with keys: stockCode, stockName, marketType, price,
+                    prevClose, openPrice, highPrice, lowPrice, volume, (tradeDate for US).
+                    Returns {'error': str} on failure.
+    """
     for attempt in range(max_retries):
         try:
             if market_type == 2:
@@ -60,6 +91,17 @@ def fetch_quote(symbol, market_type, max_retries=3):
     return {'error': 'max retries exceeded'}
 
 def fetch_kline(symbol, market_type, stock_name, period='1y', max_retries=3):
+    """Fetch historical K-line (candlestick) data for a stock.
+
+    @param symbol: str - Stock code/symbol.
+    @param market_type: int - 2 for HK stocks, 3 for US stocks.
+    @param stock_name: str - Human-readable stock name (unused, kept for interface consistency).
+    @param period: str - Time period (e.g., "1y", "6mo", "3mo"). Default "1y".
+    @param max_retries: int - Maximum retry attempts on failure (default 3).
+    @return: list[dict] - List of K-line entries with keys: trade_date, open_price,
+                          high_price, low_price, close_price, volume.
+                          Returns [] if no data, {'error': str} on failure.
+    """
     for attempt in range(max_retries):
         try:
             if market_type == 2:

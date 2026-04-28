@@ -1,3 +1,12 @@
+<!--
+  File: App.vue
+  Created: 2024-01-01
+  Author: CAISHENG <caisheng.cn@gmail.com>
+  Description: Root Vue component. Renders the current route via router-view and applies a global CSS reset.
+  Version History:
+    v1.0 - Initial version
+-->
+
 <template>
   <div id="app">
     <router-view />

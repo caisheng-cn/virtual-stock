@@ -1,3 +1,14 @@
+/**
+ * File: import-a-share.js
+ * Created: 2024-01-01
+ * Author: CAISHENG <caisheng.cn@gmail.com>
+ * Description: Batch imports A-share stock K-line data from Sina Finance API
+ *              into the stock_prices table. Processes stocks that are missing
+ *              K-line data with configurable concurrency.
+ * Version History:
+ *   - 2024-01-01: Initial version
+ */
+
 const mysql = require('mysql2/promise');
 const axios = require('axios');
 
@@ -7,6 +18,11 @@ const CONCURRENCY = 50;
 
 const klineCache = new Map();
 
+/**
+ * Fetches K-line data for a batch of stock symbols from Sina Finance API.
+ * @param {Array<{stock_code: string, stock_name: string}>} symbols - Stock symbols to fetch
+ * @returns {Promise<Array<{stock_code: string, stock_name: string, data: Array|null, error?: string}>>}
+ */
 async function fetchKLineBatch(symbols) {
   const results = [];
   for (const { stock_code, stock_name } of symbols) {
@@ -27,6 +43,11 @@ async function fetchKLineBatch(symbols) {
   return results;
 }
 
+/**
+ * Main entry point. Finds stocks missing K-line data and downloads them
+ * concurrently using multiple workers.
+ * @returns {Promise<void>}
+ */
 async function main() {
   console.log('=== 批量导入A股K线数据 ===\n');
 
@@ -55,7 +76,10 @@ async function main() {
   let totalFailed = 0;
   let done = 0;
 
-  // 并发处理
+  /**
+   * Concurrent worker that fetches K-line data for a single stock and inserts it.
+   * @returns {Promise<void>}
+   */
   async function worker() {
     while (true) {
       const i = done++;
