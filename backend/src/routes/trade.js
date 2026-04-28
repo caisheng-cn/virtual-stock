@@ -33,23 +33,36 @@ const router = express.Router()
  */
 async function createGroupMessage(userId, mType, code, name, marketType, shares, price, amount) {
   try {
+    let stockName = name
+    if (!stockName || stockName === code || stockName.length <= 3) {
+      try {
+        const { StockPool } = require('../models')
+        const pool = await StockPool.findOne({ where: { stock_code: code, market_type: marketType } })
+        if (pool && pool.stock_name) stockName = pool.stock_name
+      } catch (e) {}
+    }
     const userGroups = await UserGroup.findAll({ where: { user_id: userId } })
     if (userGroups.length === 0) return
     const typeLabels = { 1: '买入', 2: '卖出', 3: '分红', 4: '配股' }
     const label = typeLabels[mType] || ''
-    const content = `${label} ${name}(${code}) ${shares}股, 单价¥${parseFloat(price || 0).toFixed(2)}`
+    const priceVal = parseFloat(price || 0)
+    const amountVal = parseFloat(amount || 0)
+    const content = `${label} ${code} ${stockName} ${shares}股 单价¥${priceVal.toFixed(2)} 总额¥${amountVal.toFixed(2)}`
+    const marketLabels = { 1: 'A股', 2: '港股', 3: '美股' }
+    const marketLabel = marketLabels[marketType] || ''
+    const displayContent = `${label} ${code} ${stockName} | ${marketLabel} | 单价¥${priceVal.toFixed(2)} × ${shares}股 = ¥${amountVal.toFixed(2)}`
     for (const ug of userGroups) {
       await GroupMessage.create({
         group_id: ug.group_id,
         user_id: userId,
         message_type: mType,
         stock_code: code,
-        stock_name: name,
+        stock_name: stockName,
         market_type: marketType,
         shares,
-        price: parseFloat(price || 0),
-        amount: parseFloat(amount || 0),
-        content
+        price: priceVal,
+        amount: amountVal,
+        content: displayContent
       })
     }
   } catch (e) {

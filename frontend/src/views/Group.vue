@@ -46,15 +46,27 @@
       <template #header>
         <div class="card-header">
           <span>{{ $t('group_page.member_trades') }}</span>
-          <el-select
-            v-model="selectedMember"
-            :placeholder="$t('group_page.select_member')"
-            @change="fetchMemberDetail"
-            style="width:200px"
-            clearable
-          >
-            <el-option v-for="m in ranking" :key="m.userId" :label="m.nickname || '用户' + m.userId" :value="m.userId" />
-          </el-select>
+          <div style="display:flex;gap:10px;align-items:center">
+            <el-date-picker
+              v-model="tradeDateRange"
+              type="daterange"
+              range-separator="~"
+              :start-placeholder="$t('group_page.start_date')"
+              :end-placeholder="$t('group_page.end_date')"
+              value-format="YYYY-MM-DD"
+              @change="fetchMemberDetail"
+              style="width: 260px"
+            />
+            <el-select
+              v-model="selectedMember"
+              :placeholder="$t('group_page.select_member')"
+              @change="fetchMemberDetail"
+              style="width:200px"
+              clearable
+            >
+              <el-option v-for="m in ranking" :key="m.userId" :label="m.nickname || '用户' + m.userId" :value="m.userId" />
+            </el-select>
+          </div>
         </div>
       </template>
 
@@ -132,9 +144,13 @@
         <el-divider style="margin:12px 0" />
 
         <div style="margin-bottom:8px;font-weight:bold;font-size:14px">{{ $t('group_page.transaction_records') }}</div>
+        <div style="font-size:12px;color:#999;margin-bottom:8px">{{ $t('group_page.last_month_hint') }}</div>
         <el-table :data="memberDetail.transactions" stripe size="small">
-          <el-table-column prop="stockCode" :label="$t('group_page.stock_code')" width="100" />
+          <el-table-column prop="stockCode" :label="$t('group_page.stock_code')" width="95" />
           <el-table-column prop="stockName" :label="$t('group_page.stock_name')" />
+          <el-table-column prop="marketType" :label="$t('group_page.market_type')" width="65">
+            <template #default="{ row }">{{ getMarketTypeLabel(row.marketType) }}</template>
+          </el-table-column>
           <el-table-column prop="tradeType" :label="$t('group_page.type')" width="80">
             <template #default="{ row }">{{ row.tradeType === 1 ? $t('trade_page.buy') : $t('trade_page.sell') }}</template>
           </el-table-column>
@@ -192,10 +208,11 @@
           <div class="message-content">{{ msg.content }}</div>
 
           <div v-if="msg.stock_code" class="message-stock-info">
-            <span>{{ msg.stock_code }} {{ msg.stock_name }}</span>
+            <span>{{ getMessageTypeLabel(msg.message_type) }} {{ msg.stock_code }} {{ msg.stock_name }}</span>
             <span v-if="msg.market_type"> | {{ getMarketTypeLabel(msg.market_type) }}</span>
             <span v-if="msg.price"> | {{ $t('group_page.unit_price') }} ¥{{ msg.price?.toFixed(2) }}</span>
-            <span v-if="msg.amount"> | {{ $t('group_page.total_amount') }} ¥{{ msg.amount?.toFixed(2) }}</span>
+            <span v-if="msg.shares"> | {{ $t('group_page.shares') }}: {{ msg.shares }}</span>
+            <span v-if="msg.amount"> | = ¥{{ msg.amount?.toFixed(2) }}</span>
           </div>
 
           <div class="message-actions">
@@ -294,6 +311,8 @@ const messagePage = ref(1)
 const messagesLoading = ref(false)
 const messageDateRange = ref(null)
 const replyText = ref({})
+
+const tradeDateRange = ref(null)
 
 /**
  * formatMoney
@@ -402,7 +421,12 @@ const fetchMemberDetail = async () => {
   }
   memberDetailLoading.value = true
   try {
-    const res = await getMemberDetails(currentGroup.value, selectedMember.value)
+    const params = { page: 1, pageSize: 20 }
+    if (tradeDateRange.value) {
+      params.start_date = tradeDateRange.value[0]
+      params.end_date = tradeDateRange.value[1]
+    }
+    const res = await getMemberDetails(currentGroup.value, selectedMember.value, params)
     memberDetail.value = res.data
   } catch (err) {
     ElMessage.error(err.message || t('group_page.fetch_failed'))

@@ -221,6 +221,7 @@
     "floating_profit": "Floating P/L",
     "no_positions": "No positions",
     "transaction_records": "Transaction Records",
+    "last_month_hint": "Showing transactions from the last 30 days. Use date filter to view more.",
     "amount": "Amount",
     "unit_price": "Unit Price",
     "total_amount": "Total Amount"

@@ -221,6 +221,7 @@
     "floating_profit": "浮盈亏",
     "no_positions": "暂无持仓",
     "transaction_records": "交易记录",
+    "last_month_hint": "近30天内的交易记录，可通过日期筛选查询更多",
     "amount": "总价",
     "unit_price": "单价",
     "total_amount": "总额"

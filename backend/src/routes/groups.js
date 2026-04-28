@@ -9,7 +9,7 @@
  */
 
 const express = require('express')
-const { Group, UserGroup, User, UserBalance, Position, StockPricesCache, Transaction, sequelize } = require('../models')
+const { Group, UserGroup, User, UserBalance, Position, StockPricesCache, StockPool, Transaction, sequelize } = require('../models')
 const { Op } = require('sequelize')
 const auth = require('../utils/auth')
 
@@ -220,8 +220,8 @@ router.get('/:groupId/ranking', auth, async (req, res) => {
 /**
  * GET /api/v1/groups/:groupId/members/:userId/details
  * Get detailed information about a specific group member, including balance, positions,
- * and recent transactions.
- * Query: { page?, pageSize? }
+ * and recent transactions (defaults to last 30 days).
+ * Query: { page?, pageSize?, start_date?, end_date? }
  * Response: { code, data: { userId, nickname, balance, positions, transactions, totalTransactions } }
  */
 router.get('/:groupId/members/:userId/details', auth, async (req, res) => {
@@ -243,13 +243,18 @@ router.get('/:groupId/members/:userId/details', auth, async (req, res) => {
     const positions = await Position.findAll({ where: { user_id: userId, shares: { [Op.gt]: 0 } } })
     const positionList = []
     for (const p of positions) {
+      let stockName = ''
+      try {
+        const pool = await StockPool.findOne({ where: { stock_code: p.stock_code, market_type: p.market_type } })
+        if (pool) stockName = pool.stock_name
+      } catch (e) {}
       const cache = await StockPricesCache.findOne({ where: { stock_code: p.stock_code, market_type: p.market_type } })
       const currentPrice = cache ? parseFloat(cache.close_price) : 0
       const marketValue = p.shares * currentPrice
       const avgCost = parseFloat(p.avg_cost) || 0
       positionList.push({
         stockCode: p.stock_code,
-        stockName: p.stock_name,
+        stockName: stockName || p.stock_code,
         marketType: p.market_type,
         shares: p.shares,
         avgCost,
@@ -260,23 +265,42 @@ router.get('/:groupId/members/:userId/details', auth, async (req, res) => {
       })
     }
 
-    const { page = 1, pageSize = 20 } = req.query
+    const { page = 1, pageSize = 20, start_date, end_date } = req.query
+    const where = { user_id: userId, trade_type: { [Op.in]: [1, 2] } }
+    const oneMonthAgo = new Date()
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+    const defaultStart = oneMonthAgo.toISOString().split('T')[0]
+    const today = new Date().toISOString().split('T')[0]
+    where.trade_date = {
+      [Op.gte]: start_date || defaultStart,
+      [Op.lte]: end_date || today
+    }
+
     const { count, rows } = await Transaction.findAndCountAll({
-      where: { user_id: userId, group_id: groupId, trade_type: { [Op.in]: [1, 2] } },
+      where,
       limit: parseInt(pageSize),
       offset: (parseInt(page) - 1) * parseInt(pageSize),
       order: [['created_at', 'DESC']]
     })
 
-    const transactionList = rows.map(t => ({
-      id: t.id,
-      stockCode: t.stock_code,
-      stockName: t.stock_name,
-      tradeType: t.trade_type,
-      price: parseFloat(t.price) || 0,
-      shares: t.shares,
-      amount: parseFloat(t.amount) || 0,
-      tradeDate: t.trade_date
+    const transactionList = await Promise.all(rows.map(async t => {
+      let stockName = ''
+      try {
+        const pool = await StockPool.findOne({ where: { stock_code: t.stock_code, market_type: t.market_type } })
+        if (pool) stockName = pool.stock_name
+      } catch (e) {}
+      if (!stockName) stockName = t.stock_name
+      return {
+        id: t.id,
+        stockCode: t.stock_code,
+        stockName: stockName || t.stock_code,
+        marketType: t.market_type,
+        tradeType: t.trade_type,
+        price: parseFloat(t.price) || 0,
+        shares: t.shares,
+        amount: parseFloat(t.amount) || 0,
+        tradeDate: t.trade_date
+      }
     }))
 
     res.json({

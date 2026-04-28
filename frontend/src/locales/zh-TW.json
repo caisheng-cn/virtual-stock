@@ -221,6 +221,7 @@
     "floating_profit": "浮盈虧",
     "no_positions": "暫無持倉",
     "transaction_records": "交易記錄",
+    "last_month_hint": "近30天內的交易記錄，可通過日期篩選查詢更多",
     "amount": "總價",
     "unit_price": "單價",
     "total_amount": "總額"

@@ -70,6 +70,7 @@ export const getGroupRanking = (groupId) => request.get(`/groups/${groupId}/rank
  * Description: GET /groups/:groupId/members/:userId/details — Retrieves detailed information for a specific member.
  * @param {number|string} groupId - Group ID
  * @param {number|string} userId - User ID
+ * @param {Object} params - Query parameters (page, pageSize, start_date, end_date)
  * @returns {Promise<Object>} Response containing member details
  */
-export const getMemberDetails = (groupId, userId) => request.get(`/groups/${groupId}/members/${userId}/details`)
+export const getMemberDetails = (groupId, userId, params) => request.get(`/groups/${groupId}/members/${userId}/details`, { params })

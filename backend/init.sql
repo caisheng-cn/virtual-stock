@@ -327,6 +327,7 @@ CREATE TABLE IF NOT EXISTS group_messages (
   message_type TINYINT NOT NULL COMMENT '1买入 2卖出 3分红 4配股',
   stock_code  VARCHAR(20),
   stock_name  VARCHAR(100),
+  market_type TINYINT DEFAULT 0,
   shares      INT,
   price       DECIMAL(15,4),
   amount      DECIMAL(15,2),
@@ -387,9 +388,6 @@ INSERT INTO commission_configs (market_type, trade_type, commission_rate) VALUES
 (3, 1, 5),
 (3, 2, 5)
 ON DUPLICATE KEY UPDATE commission_rate = VALUES(commission_rate);
-
--- group_messages表添加市场类型字段
-ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS market_type TINYINT DEFAULT 0;
 
 -- 市场时间配置
 INSERT INTO market_config (market_type, refresh_time, trade_start, trade_end) VALUES
