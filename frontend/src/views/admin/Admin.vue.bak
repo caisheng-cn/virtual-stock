@@ -1,0 +1,696 @@
+<template>
+  <div class="admin-container">
+    <div class="header">
+      <h2>后台管理</h2>
+      <el-button @click="handleLogout">退出</el-button>
+    </div>
+
+    <el-container>
+      <el-aside width="200px">
+        <el-menu :default-active="activeMenu" @select="handleMenuSelect">
+          <el-menu-item index="dashboard">
+            <span>仪表盘</span>
+          </el-menu-item>
+          <el-menu-item index="users">
+            <span>用户管理</span>
+          </el-menu-item>
+          <el-menu-item index="groups">
+            <span>群组管理</span>
+          </el-menu-item>
+          <el-menu-item index="stocks">
+            <span>股票管理</span>
+          </el-menu-item>
+          <el-menu-item index="market-config">
+            <span>股市设置</span>
+          </el-menu-item>
+          <el-menu-item index="statistics">
+            <span>统计中心</span>
+          </el-menu-item>
+          <el-menu-item index="invite">
+            <span>邀请码</span>
+          </el-menu-item>
+          <el-menu-item index="commission">
+            <span>佣金设置</span>
+          </el-menu-item>
+        </el-menu>
+      </el-aside>
+
+      <el-main>
+        <div v-if="activeMenu === 'dashboard'" class="dashboard">
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-card>
+                <div class="stat-item">
+                  <div class="label">用户总数</div>
+                  <div class="value">{{ stats.userCount || 0 }}</div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="8">
+              <el-card>
+                <div class="stat-item">
+                  <div class="label">群组总数</div>
+                  <div class="value">{{ stats.groupCount || 0 }}</div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="8">
+              <el-card>
+                <div class="stat-item">
+                  <div class="label">股票总数</div>
+                  <div class="value">{{ stats.stockCount || 0 }}</div>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
+        </div>
+
+        <div v-if="activeMenu === 'groups'" class="groups">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>群组列表</span>
+                <el-button type="primary" @click="showGroupDialog = true">创建群组</el-button>
+              </div>
+            </template>
+            <el-table :data="groupList">
+              <el-table-column prop="id" label="ID" width="60" />
+              <el-table-column prop="name" label="名称" />
+              <el-table-column prop="description" label="描述" />
+              <el-table-column prop="init_cash" label="初始化资金" width="120">
+                <template #default="{ row }">{{ row.init_cash || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="status" label="状态" width="80">
+                <template #default="{ row }">{{ row.status === 1 ? '正常' : '禁用' }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="150">
+                <template #default="{ row }">
+                  <el-button size="small" @click="editGroup(row)">编辑</el-button>
+                  <el-button size="small" type="danger" @click="deleteGroup(row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </div>
+
+        <div v-if="activeMenu === 'users'" class="users">
+          <el-card>
+            <template #header>
+              <span>用户列表</span>
+            </template>
+            <el-table :data="userList">
+              <el-table-column prop="id" label="ID" width="60" />
+              <el-table-column prop="username" label="用户名" />
+              <el-table-column prop="nickname" label="昵称" />
+              <el-table-column prop="status" label="状态" width="80">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 1 ? 'success' : 'danger'">{{ row.status === 1 ? '正常' : '禁用' }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="created_at" label="注册时间" width="160" />
+              <el-table-column label="操作" width="150">
+                <template #default="{ row }">
+                  <el-button size="small" @click="toggleUserStatus(row)">{{ row.status === 1 ? '禁用' : '启用' }}</el-button>
+                  <el-button size="small" type="danger" @click="deleteUser(row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </div>
+
+        <div v-if="activeMenu === 'stocks'" class="stocks">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>股票池管理</span>
+                <el-button type="primary" @click="showStockDialog = true">添加股票</el-button>
+              </div>
+            </template>
+            <el-table :data="stockList">
+              <el-table-column prop="id" label="ID" width="60" />
+              <el-table-column prop="stock_code" label="代码" width="100" />
+              <el-table-column prop="stock_name" label="名称" />
+              <el-table-column prop="market_type" label="市场" width="80">
+                <template #default="{ row }">{{ marketTypeMap[row.market_type] }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="100">
+                <template #default="{ row }">
+                  <el-button size="small" type="danger" @click="deleteStock(row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </div>
+
+        <div v-if="activeMenu === 'invite'" class="invite">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>邀请码管理</span>
+                <el-button type="primary" @click="showInviteDialog = true">生成邀请码</el-button>
+              </div>
+            </template>
+            <el-table :data="inviteList">
+              <el-table-column prop="id" label="ID" width="60" />
+              <el-table-column prop="code" label="邀请码" />
+              <el-table-column prop="group_id" label="群组ID" width="80" />
+              <el-table-column prop="use_limit" label="使用次数" width="100">
+                <template #default="{ row }">{{ row.use_limit || '无限制' }}</template>
+              </el-table-column>
+              <el-table-column prop="used_count" label="已使用" width="80" />
+              <el-table-column prop="expire_date" label="过期日期" width="120" />
+            </el-table>
+          </el-card>
+        </div>
+
+        <div v-if="activeMenu === 'commission'" class="commission">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>佣金设置</span>
+                <el-button type="info" size="small" @click="showCommissionHistoryDialog = true; loadCommissionHistory()">查看历史</el-button>
+              </div>
+            </template>
+            <el-table :data="commissionList" stripe>
+              <el-table-column prop="id" label="ID" width="60" />
+              <el-table-column label="市场" width="100">
+                <template #default="{ row }">
+                  {{ getMarketLabel(row.market_type) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="交易类型" width="100">
+                <template #default="{ row }">
+                  {{ row.trade_type === 1 ? '买入' : '卖出' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="佣金比例" width="150">
+                <template #default="{ row }">
+                  {{ formatCommissionRate(row.commission_rate) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="150">
+                <template #default="{ row }">
+                  <el-button size="small" @click="editCommission(row)">修改</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </div>
+
+        <div v-if="activeMenu === 'market-config'" class="market-config">
+            <el-form :model="commissionForm">
+              <el-form-item label="市场">
+                <el-input :value="getMarketLabel(commissionForm.market_type)" disabled />
+              </el-form-item>
+              <el-form-item label="交易类型">
+                <el-input :value="commissionForm.trade_type === 1 ? '买入' : '卖出'" disabled />
+              </el-form-item>
+              <el-form-item label="佣金比例">
+                <el-input-number v-model="commissionForm.newRate" :precision="6" :step="0.0001" :min="0" :max="0.1" />
+                <span class="rate-hint">（如 0.005 = 0.5%）</span>
+              </el-form-item>
+              <el-form-item label="修改备注">
+                <el-input v-model="commissionForm.remark" placeholder="可选备注" />
+              </el-form-item>
+            </el-form>
+            <template #footer>
+              <el-button @click="showCommissionDialog = false">取消</el-button>
+              <el-button type="primary" @click="saveCommission">确定</el-button>
+            </template>
+          </el-dialog>
+        </div>
+
+        <div v-if="activeMenu === 'market-config'" class="market-config">
+          <el-card>
+            <template #header>
+              <span>股市设置</span>
+            </template>
+            <el-table :data="marketConfigList" stripe>
+              <el-table-column prop="id" label="ID" width="60" />
+              <el-table-column label="市场" width="100">
+                <template #default="{ row }">{{ getMarketLabel(row.market_type) }}</template>
+              </el-table-column>
+              <el-table-column prop="refresh_time" label="刷新时间" width="100" />
+              <el-table-column prop="trade_start" label="交易开始" width="100" />
+              <el-table-column prop="trade_end" label="交易结束" width="100" />
+              <el-table-column label="状态" width="80">
+                <template #default="{ row }">
+                  <el-tag :type="row.enabled === 1 ? 'success' : 'info'">{{ row.enabled === 1 ? '启用' : '禁用' }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="150">
+                <template #default="{ row }">
+                  <el-button size="small" @click="editMarketConfig(row)">配置</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+
+          <el-card style="margin-top: 20px;">
+            <template #header>
+              <div class="card-header">
+                <span>缺失数据</span>
+                <el-button type="primary" size="small" @click="checkMissing">检查缺失</el-button>
+              </div>
+            </template>
+            <el-table :data="missingList">
+              <el-table-column prop="stock_code" label="代码" width="100" />
+              <el-table-column prop="stock_name" label="名称" />
+              <el-table-column prop="market_type" label="市场" width="80">
+                <template #default="{ row }">{{ getMarketLabel(row.market_type) }}</template>
+              </el-table-column>
+              <el-table-column prop="status" label="状态" width="80">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === '缺失' ? 'danger' : 'warning'">{{ row.status }}</el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </div>
+
+        <div v-if="activeMenu === 'statistics'" class="statistics">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>统计中心</span>
+                <div>
+                  <el-button size="small" @click="statsPeriod = 'week'; loadGroupStats()">近一周</el-button>
+                  <el-button size="small" @click="statsPeriod = 'month'; loadGroupStats()">近一月</el-button>
+                  <el-button size="small" @click="statsPeriod = 'custom'; loadGroupStats()">自定义</el-button>
+                </div>
+              </div>
+            </template>
+            <el-table :data="groupStats" stripe>
+              <el-table-column prop="rank" label="排名" width="60" />
+              <el-table-column prop="group_name" label="群组" />
+              <el-table-column prop="init_cash" label="初始资金" width="120">
+                <template #default="{ row }">{{ formatMoney(row.init_cash) }}</template>
+              </el-table-column>
+              <el-table-column prop="total_assets" label="总资产" width="120">
+                <template #default="{ row }">{{ formatMoney(row.total_assets) }}</template>
+              </el-table-column>
+              <el-table-column prop="profit" label="收益" width="120">
+                <template #default="{ row }">
+                  <span :class="{ 'profit-positive': parseFloat(row.profit) > 0, 'profit-negative': parseFloat(row.profit) < 0 }">
+                    {{ formatMoney(row.profit) }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="profit_rate" label="收益率" width="100">
+                <template #default="{ row }">{{ row.profit_rate }}%</template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+
+          <el-card style="margin-top: 20px;">
+            <template #header>
+              <span>用户活跃度</span>
+            </template>
+            <el-table :data="userStats" stripe>
+              <el-table-column prop="username" label="用户名" />
+              <el-table-column prop="trade_count" label="交易次数" width="100" />
+              <el-table-column prop="login_count" label="登录次数" width="100" />
+              <el-table-column prop="total_profit" label="总收益" width="120">
+                <template #default="{ row }">{{ formatMoney(row.total_profit) }}</template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </div>
+      </el-main>
+    </el-container>
+
+    <el-dialog v-model="showGroupDialog" title="创建群组">
+      <el-form :model="groupForm">
+        <el-form-item label="群组名称">
+          <el-input v-model="groupForm.name" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="groupForm.description" />
+        </el-form-item>
+        <el-form-item label="初始化资金">
+          <el-input-number v-model="groupForm.init_cash" :min="0" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showGroupDialog = false">取消</el-button>
+        <el-button type="primary" @click="createGroup">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showStockDialog" title="添加股票">
+      <el-form :model="stockForm">
+        <el-form-item label="股票代码">
+          <el-input v-model="stockForm.stock_code" />
+        </el-form-item>
+        <el-form-item label="股票名称">
+          <el-input v-model="stockForm.stock_name" />
+        </el-form-item>
+        <el-form-item label="市场类型">
+          <el-select v-model="stockForm.market_type">
+            <el-option :label="'A股'" :value="1" />
+            <el-option :label="'港股'" :value="2" />
+            <el-option :label="'美股'" :value="3" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showStockDialog = false">取消</el-button>
+        <el-button type="primary" @click="createStock">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showInviteDialog" title="生成邀请码">
+      <el-form :model="inviteForm">
+        <el-form-item label="群组ID">
+          <el-input-number v-model="inviteForm.group_id" />
+        </el-form-item>
+        <el-form-item label="过期天数">
+          <el-input-number v-model="inviteForm.expire_days" :min="0" />
+        </el-form-item>
+        <el-form-item label="使用次数限制">
+          <el-input-number v-model="inviteForm.use_limit" :min="0" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showInviteDialog = false">取消</el-button>
+        <el-button type="primary" @click="createInvite">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showMarketConfigDialog" title="配置市场">
+      <el-form :model="marketConfigForm">
+        <el-form-item label="刷新时间">
+          <el-input v-model="marketConfigForm.refresh_time" placeholder="HH:mm" />
+        </el-form-item>
+        <el-form-item label="交易开始时间">
+          <el-input v-model="marketConfigForm.trade_start" placeholder="HH:mm" />
+        </el-form-item>
+        <el-form-item label="交易结束时间">
+          <el-input v-model="marketConfigForm.trade_end" placeholder="HH:mm" />
+        </el-form-item>
+        <el-form-item label="启用状态">
+          <el-switch v-model="marketConfigForm.enabled" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showMarketConfigDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveMarketConfig">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showCommissionHistoryDialog" title="佣金修改历史">
+      <el-table :data="commissionHistoryList">
+        <el-table-column prop="changed_at" label="修改时间" width="160" />
+        <el-table-column label="市场" width="80">
+          <template #default="{ row }">{{ getMarketLabel(row.market_type) }}</template>
+        </el-table-column>
+        <el-table-column label="类型" width="80">
+          <template #default="{ row }">{{ row.trade_type === 1 ? '买入' : '卖出' }}</template>
+        </el-table-column>
+        <el-table-column label="原比例" width="100">
+          <template #default="{ row }">{{ formatCommissionRate(row.old_rate) }}</template>
+        </el-table-column>
+        <el-table-column label="新比例" width="100">
+          <template #default="{ row }">{{ formatCommissionRate(row.new_rate) }}</template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" />
+      </el-table>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { getStats, getGroups, createGroup as createGroupAPI, getUsers, toggleUserStatus as toggleUserStatusAPI, deleteUser as deleteUserAPI, getStocks, createStock as createStockAPI, deleteStock as deleteStockAPI, getInviteCodes, createInviteCode, getCommissionConfigs, updateCommissionConfig, getCommissionHistory, getMarketConfig, updateMarketConfig, getMissingStocks, getGroupStatistics, getUserStatistics } from '@/api/admin'
+
+const router = useRouter()
+const activeMenu = ref('dashboard')
+const marketTypeMap = { 1: 'A股', 2: '港股', 3: '美股' }
+
+const stats = ref({})
+const groupList = ref([])
+const userList = ref([])
+const stockList = ref([])
+const inviteList = ref([])
+const commissionList = ref([])
+const commissionHistoryList = ref([])
+const marketConfigList = ref([])
+const missingList = ref([])
+const groupStats = ref([])
+const userStats = ref([])
+const statsPeriod = ref('week')
+
+const showGroupDialog = ref(false)
+const showStockDialog = ref(false)
+const showInviteDialog = ref(false)
+const showCommissionDialog = ref(false)
+const showMarketConfigDialog = ref(false)
+const showCommissionHistoryDialog = ref(false)
+
+const groupForm = reactive({ name: '', description: '', init_cash: 100000 })
+const stockForm = reactive({ stock_code: '', stock_name: '', market_type: 1 })
+const inviteForm = reactive({ group_id: 1, expire_days: 0, use_limit: 0 })
+const commissionForm = reactive({ id: null, market_type: null, trade_type: null, newRate: 0, remark: '' })
+const marketConfigForm = reactive({ id: null, refresh_time: '', trade_start: '', trade_end: '', enabled: 1 })
+
+onMounted(() => {
+  fetchData()
+})
+
+const fetchData = async () => {
+  stats.value = await getStats().then(r => r.data || {})
+  groupList.value = await getGroups().then(r => r.data?.list || [])
+  userList.value = await getUsers().then(r => r.data?.list || [])
+  stockList.value = await getStocks().then(r => r.data?.list || [])
+  inviteList.value = await getInviteCodes().then(r => r.data?.list || [])
+  commissionList.value = await getCommissionConfigs().then(r => r.data || [])
+  marketConfigList.value = await getMarketConfig().then(r => r.data || [])
+  await loadGroupStats()
+  await loadUserStats()
+}
+
+const loadGroupStats = async () => {
+  groupStats.value = await getGroupStatistics({ period: statsPeriod.value }).then(r => r.data || [])
+}
+
+const loadUserStats = async () => {
+  userStats.value = await getUserStatistics().then(r => r.data || [])
+}
+
+const getMarketLabel = (marketType) => {
+  const labels = { 1: 'A股', 2: '港股', 3: '美股' }
+  return labels[marketType] || '未知'
+}
+
+const formatMoney = (value) => {
+  if (!value) return '0.00'
+  return parseFloat(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const formatCommissionRate = (rate) => {
+  const percent = parseFloat(rate) * 100
+  if (percent < 0.1) {
+    return (parseFloat(rate) * 10000).toFixed(2) + '‰'
+  }
+  return percent.toFixed(4) + '%'
+}
+
+const editCommission = (row) => {
+  commissionForm.id = row.id
+  commissionForm.market_type = row.market_type
+  commissionForm.trade_type = row.trade_type
+  commissionForm.newRate = parseFloat(row.commission_rate)
+  commissionForm.remark = ''
+  showCommissionDialog.value = true
+}
+
+const saveCommission = async () => {
+  try {
+    await updateCommissionConfig(commissionForm.id, { commission_rate: commissionForm.newRate, remark: commissionForm.remark })
+    ElMessage.success('更新成功')
+    showCommissionDialog.value = false
+    commissionList.value = await getCommissionConfigs().then(r => r.data || [])
+  } catch (err) {
+    ElMessage.error(err.message || '更新失败')
+  }
+}
+
+const editMarketConfig = (row) => {
+  marketConfigForm.id = row.id
+  marketConfigForm.refresh_time = row.refresh_time
+  marketConfigForm.trade_start = row.trade_start
+  marketConfigForm.trade_end = row.trade_end
+  marketConfigForm.enabled = row.enabled
+  showMarketConfigDialog.value = true
+}
+
+const saveMarketConfig = async () => {
+  try {
+    await updateMarketConfig(marketConfigForm.id, marketConfigForm)
+    ElMessage.success('更新成功')
+    showMarketConfigDialog.value = false
+    marketConfigList.value = await getMarketConfig().then(r => r.data || [])
+  } catch (err) {
+    ElMessage.error(err.message || '更新失败')
+  }
+}
+
+const loadCommissionHistory = async () => {
+  commissionHistoryList.value = await getCommissionHistory().then(r => r.data?.list || [])
+}
+
+const checkMissing = async () => {
+  missingList.value = await getMissingStocks().then(r => r.data || [])
+  ElMessage.success('检查完成')
+}
+
+const handleMenuSelect = (index) => {
+  activeMenu.value = index
+}
+
+const createGroup = async () => {
+  try {
+    await createGroupAPI(groupForm)
+    ElMessage.success('创建成功')
+    showGroupDialog.value = false
+    groupList.value = await getGroups().then(r => r.data?.list || [])
+  } catch (err) {
+    ElMessage.error(err.message || '创建失败')
+  }
+}
+
+const deleteGroup = async (row) => {
+  try {
+    await deleteGroupAPI(row.id)
+    ElMessage.success('删除成功')
+    groupList.value = await getGroups().then(r => r.data?.list || [])
+  } catch (err) {
+    ElMessage.error(err.message || '删除失败')
+  }
+}
+
+const toggleUserStatus = async (row) => {
+  try {
+    await toggleUserStatusAPI(row.id, { status: row.status === 1 ? 0 : 1 })
+    ElMessage.success('操作成功')
+    userList.value = await getUsers().then(r => r.data?.list || [])
+  } catch (err) {
+    ElMessage.error(err.message || '操作失败')
+  }
+}
+
+const deleteUser = async (row) => {
+  try {
+    await deleteUserAPI(row.id)
+    ElMessage.success('删除成功')
+    userList.value = await getUsers().then(r => r.data?.list || [])
+  } catch (err) {
+    ElMessage.error(err.message || '删除失败')
+  }
+}
+
+const createStock = async () => {
+  try {
+    await createStockAPI(stockForm)
+    ElMessage.success('添加成功')
+    showStockDialog.value = false
+    stockList.value = await getStocks().then(r => r.data?.list || [])
+  } catch (err) {
+    ElMessage.error(err.message || '添加失败')
+  }
+}
+
+const deleteStock = async (row) => {
+  try {
+    await deleteStockAPI(row.id)
+    ElMessage.success('删除成功')
+    stockList.value = await getStocks().then(r => r.data?.list || [])
+  } catch (err) {
+    ElMessage.error(err.message || '删除失败')
+  }
+}
+
+const createInvite = async () => {
+  try {
+    await createInviteCode(inviteForm)
+    ElMessage.success('生成成功')
+    showInviteDialog.value = false
+    inviteList.value = await getInviteCodes().then(r => r.data?.list || [])
+  } catch (err) {
+    ElMessage.error(err.message || '生成失败')
+  }
+}
+
+const handleLogout = () => {
+  localStorage.removeItem('adminToken')
+  localStorage.removeItem('adminId')
+  router.push('/admin-login')
+}
+</script>
+
+<style scoped>
+.admin-container {
+  height: 100vh;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.el-container {
+  height: calc(100vh - 80px);
+}
+
+.el-aside {
+  background: white;
+  padding: 20px 0;
+}
+
+.el-main {
+  background: #f5f5f5;
+  padding: 20px;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 20px;
+}
+
+.stat-item .label {
+  font-size: 14px;
+  color: #999;
+  margin-bottom: 10px;
+}
+
+.stat-item .value {
+  font-size: 32px;
+  font-weight: bold;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rate-hint {
+  margin-left: 10px;
+  color: #999;
+  font-size: 12px;
+}
+
+.profit-positive {
+  color: #f56c6c;
+}
+
+.profit-negative {
+  color: #67c23a;
+}
+</style>

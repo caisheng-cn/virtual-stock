@@ -1,0 +1,1 @@
+import{r as s}from"./request-CVf62gDQ.js";const d=(t,a,e,r,n)=>s.get("/transactions",{params:{start_date:t,end_date:a,trade_type:e,page:r,pageSize:n}}),c=(t,a)=>s.get("/transactions/fund-flow",{params:{start_date:t,end_date:a}});export{c as a,d as g};

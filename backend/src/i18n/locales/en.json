@@ -1,0 +1,45 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "error": "Error",
+    "success": "Success",
+    "loading": "Loading"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "username": "Username",
+    "password": "Password",
+    "invalid_credentials": "Invalid username or password",
+    "user_disabled": "User is disabled",
+    "trade_disabled": "Trading is disabled for this user",
+    "not_authenticated": "Not authenticated",
+    "not_authorized": "Not authorized",
+    "user_not_found": "User not found",
+    "user_exists": "Username already exists",
+    "invalid_invite_code": "Invalid invitation code",
+    "invite_code_expired": "Invitation code has expired",
+    "invite_code_used_up": "Invitation code has been used up"
+  },
+  "trade": {
+    "buy": "Buy",
+    "sell": "Sell",
+    "insufficient_balance": "Insufficient balance",
+    "insufficient_balance_with_commission": "Insufficient balance (including commission)",
+    "position_not_enough": "Position not enough",
+    "parameter_missing": "Missing required parameter",
+    "trade_disabled_time": "Trading is not allowed at this time",
+    "market_config_missing": "Market configuration is missing",
+    "account_not_exist": "Account does not exist"
+  },
+  "user": {
+    "user_management": "User Management",
+    "trade_enabled": "Trade Enabled",
+    "admin_access": "Admin Access",
+    "language": "Language",
+    "update_success": "Update successful",
+    "update_failed": "Update failed"
+  }
+}
