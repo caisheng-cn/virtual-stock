@@ -134,11 +134,90 @@ def fetch_kline(symbol, market_type, stock_name, period='1y', max_retries=3):
                 return {'error': str(e)}
     return {'error': 'max retries exceeded'}
 
+def fetch_a_share_kline(symbol, start_date, end_date):
+    """Fetch A-share daily K-line data via AKShare (East Money source).
+    @param symbol: str - Stock code (e.g., '000001', '600519', '300750').
+    @param start_date: str - Start date in YYYY-MM-DD format.
+    @param end_date: str - End date in YYYY-MM-DD format.
+    @return: list[dict] - List of K-line entries with keys: trade_date, open_price,
+                          high_price, low_price, close_price, volume.
+                          Returns [] if no data, {'error': str} on failure.
+    """
+    try:
+        import akshare as ak
+        start = start_date.replace('-', '')
+        end = end_date.replace('-', '')
+        df = ak.stock_zh_a_hist(symbol=symbol, period='daily',
+                                start_date=start, end_date=end,
+                                adjust='qfq')
+        if df is None or df.empty:
+            return []
+        data = []
+        for _, row in df.iterrows():
+            data.append({
+                'trade_date': str(row['日期']),
+                'open_price': round(float(row['开盘']), 4),
+                'high_price': round(float(row['最高']), 4),
+                'low_price': round(float(row['最低']), 4),
+                'close_price': round(float(row['收盘']), 4),
+                'volume': int(row['成交量'])
+            })
+        return data
+    except Exception as e:
+        return {'error': str(e)}
+
+def fetch_a_share_batch(stocks):
+    """Fetch A-share daily K-line for multiple stocks concurrently.
+    stocks: list of {symbol, start_date, end_date}
+    Returns: list of {symbol, data}
+    """
+    import concurrent.futures
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        fut_map = {}
+        for s in stocks:
+            f = executor.submit(fetch_a_share_kline, s['symbol'], s['start_date'], s['end_date'])
+            fut_map[f] = s['symbol']
+        for future in concurrent.futures.as_completed(fut_map):
+            symbol = fut_map[future]
+            try:
+                results[symbol] = future.result()
+            except Exception as e:
+                results[symbol] = {'error': str(e)}
+    return [{'symbol': sym, 'data': results.get(sym, [])} for sym in [s['symbol'] for s in stocks]]
+
+def fetch_kline_batch(stocks, period='1y'):
+    """Fetch K-line data for multiple stocks concurrently.
+    stocks: list of {symbol, market_type, stock_name}
+    Returns: list of {symbol, data} — data is [] or {'error': msg} on failure
+    """
+    import concurrent.futures
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        fut_map = {}
+        for s in stocks:
+            f = executor.submit(fetch_kline, s['symbol'], s['market_type'], s.get('stock_name', ''), period)
+            fut_map[f] = s['symbol']
+        for future in concurrent.futures.as_completed(fut_map):
+            symbol = fut_map[future]
+            try:
+                data = future.result()
+                results[symbol] = data
+            except Exception as e:
+                results[symbol] = {'error': str(e)}
+    return [{'symbol': sym, 'data': results.get(sym, [])} for sym in [s['symbol'] for s in stocks]]
+
 if __name__ == '__main__':
     args = json.loads(sys.argv[1])
     action = args.get('action', 'kline')
     period = args.get('period', '1y')
-    if action == 'quote':
+    if action == 'kline_batch':
+        result = fetch_kline_batch(args.get('stocks', []), period)
+    elif action == 'a_share':
+        result = fetch_a_share_kline(args['symbol'], args['start_date'], args['end_date'])
+    elif action == 'a_share_batch':
+        result = fetch_a_share_batch(args.get('stocks', []))
+    elif action == 'quote':
         result = fetch_quote(args['symbol'], args['market_type'])
     else:
         result = fetch_kline(args['symbol'], args['market_type'], args.get('stock_name', ''), period=period)

@@ -18,6 +18,10 @@ const SINA_REFERER = 'http://finance.sina.com.cn'
 
 const BASE_DIR = path.resolve(__dirname, '../../')
 
+function getSinaPrefix(code) {
+  return code.startsWith('6') ? 'sh' : 'sz'
+}
+
 /**
  * Run a Python subprocess to fetch stock data via yfinance
  * @param {string} action - 'quote' or 'kline'
@@ -77,7 +81,7 @@ print(json.dumps(result))
  * @throws {Error} If the API request fails or data cannot be parsed
  */
 async function getAStockQuote(code) {
-  const url = `http://hq.sinajs.cn/list=sh${code}`
+  const url = `http://hq.sinajs.cn/list=${getSinaPrefix(code)}${code}`
   const response = await axios.get(url, { headers: { Referer: SINA_REFERER } })
   const text = response.data
   const match = text.match(/="([^"]+)"/)
@@ -188,12 +192,27 @@ async function getQuote(code, marketType) {
     })
     
     if (cached && cached.trade_date === today) {
+      let ohlc = { openPrice: 0, highPrice: 0, lowPrice: 0 }
+      try {
+        const todayRecord = await StockPrice.findOne({
+          where: { stock_code: code, market_type: marketType, trade_date: today }
+        })
+        if (todayRecord) {
+          ohlc = {
+            openPrice: parseFloat(todayRecord.open_price) || 0,
+            highPrice: parseFloat(todayRecord.high_price) || 0,
+            lowPrice: parseFloat(todayRecord.low_price) || 0
+          }
+        }
+      } catch (e) {}
+
       return {
         stockCode: cached.stock_code,
         stockName: cached.stock_name || code,
         marketType: cached.market_type,
         prevClose: parseFloat(cached.prev_close) || 0,
         price: parseFloat(cached.close_price) || 0,
+        ...ohlc,
         tradeDate: cached.trade_date,
         fromCache: true
       }
@@ -244,12 +263,27 @@ async function getQuote(code, marketType) {
         where: { stock_code: code, market_type: marketType }
       })
       if (cached) {
+        let ohlc = { openPrice: 0, highPrice: 0, lowPrice: 0 }
+        try {
+          const dayRecord = await StockPrice.findOne({
+            where: { stock_code: code, market_type: marketType, trade_date: cached.trade_date }
+          })
+          if (dayRecord) {
+            ohlc = {
+              openPrice: parseFloat(dayRecord.open_price) || 0,
+              highPrice: parseFloat(dayRecord.high_price) || 0,
+              lowPrice: parseFloat(dayRecord.low_price) || 0
+            }
+          }
+        } catch (e) {}
+
         return {
           stockCode: cached.stock_code,
           stockName: cached.stock_name || code,
           marketType: cached.market_type,
           prevClose: parseFloat(cached.prev_close) || 0,
           price: parseFloat(cached.close_price) || 0,
+          ...ohlc,
           tradeDate: cached.trade_date,
           fromCache: true,
           fallback: true
@@ -273,7 +307,7 @@ async function getQuote(code, marketType) {
  */
 async function getHistory(code, marketType, startDate, endDate) {
   if (marketType == 1) {
-    const url = `http://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=sh${code}&scale=240&ma=no&datalen=365`
+    const url = `http://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${getSinaPrefix(code)}${code}&scale=240&ma=no&datalen=365`
     const response = await axios.get(url, { headers: { Referer: 'http://finance.sina.com.cn' } })
     let data = response.data
     
@@ -349,8 +383,70 @@ async function getBatchQuotes(stocks) {
   return results
 }
 
+/**
+ * Run a batch of A-share stock history fetches via AKShare in a single Python process.
+ * Each stock is fetched concurrently inside Python (ThreadPoolExecutor).
+ * @param {Array<{symbol: string, start_date: string, end_date: string}>} stocks
+ * @returns {Promise<Array<{symbol: string, data: Array|Object}>>}
+ */
+function runPythonABatch(stocks) {
+  return new Promise((resolve, reject) => {
+    const args = JSON.stringify({ action: 'a_share_batch', stocks })
+    const scriptPath = path.join(BASE_DIR, 'fetch_kline_yfinance.py')
+    const proc = spawn('python3', [scriptPath, args])
+
+    let output = ''
+    let errorOutput = ''
+    proc.stdout.on('data', data => { output += data.toString() })
+    proc.stderr.on('data', data => { errorOutput += data.toString() })
+    proc.on('close', code => {
+      if (code !== 0) {
+        reject(new Error(`Python error: ${errorOutput}`))
+      } else {
+        try {
+          resolve(JSON.parse(output.trim()))
+        } catch (e) {
+          reject(new Error(`Parse error: ${output}`))
+        }
+      }
+    })
+  })
+}
+
+/**
+ * Run a batch of HK/US stock history fetches in a single Python process.
+ * Each stock is fetched concurrently inside Python (ThreadPoolExecutor).
+ * @param {Array<{symbol: string, market_type: number, stock_name: string}>} stocks
+ * @returns {Promise<Array<{symbol: string, data: Array|Object}>>}
+ */
+function runPythonBatch(stocks) {
+  return new Promise((resolve, reject) => {
+    const args = JSON.stringify({ action: 'kline_batch', stocks, period: '1y' })
+    const scriptPath = path.join(BASE_DIR, 'fetch_kline_yfinance.py')
+    const proc = spawn('python3', [scriptPath, args])
+
+    let output = ''
+    let errorOutput = ''
+    proc.stdout.on('data', data => { output += data.toString() })
+    proc.stderr.on('data', data => { errorOutput += data.toString() })
+    proc.on('close', code => {
+      if (code !== 0) {
+        reject(new Error(`Python error: ${errorOutput}`))
+      } else {
+        try {
+          resolve(JSON.parse(output.trim()))
+        } catch (e) {
+          reject(new Error(`Parse error: ${output}`))
+        }
+      }
+    })
+  })
+}
+
 module.exports = {
   getQuote,
   getHistory,
-  getBatchQuotes
+  getBatchQuotes,
+  runPythonBatch,
+  runPythonABatch
 }

@@ -303,3 +303,9 @@ export const getGroupStatistics = (params) => request.get('/admin/statistics/gro
  * @returns {Promise<Object>} Response containing user statistics
  */
 export const getUserStatistics = (params) => request.get('/admin/statistics/users', { params })
+
+export const startStockSync = (data) => request.post('/admin/stocks/sync', data)
+export const getStockSyncProgress = (id) => request.get(`/admin/stocks/sync/progress/${id}`)
+export const getStockSyncHistory = (params) => request.get('/admin/stocks/sync/history', { params })
+export const getStockSyncDetail = (id) => request.get(`/admin/stocks/sync/history/${id}`)
+export const cancelStockSync = (id) => request.post(`/admin/stocks/sync/cancel/${id}`)

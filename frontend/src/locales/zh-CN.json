@@ -21,7 +21,8 @@
     "login": "登录",
     "register": "注册",
     "logout": "退出",
-    "no_data": "暂无数据"
+    "no_data": "暂无数据",
+    "refresh": "刷新"
   },
   "auth": {
     "login": "登录",
@@ -336,7 +337,31 @@
     "delete_user_confirm": "确定要删除用户 \"{username}\" 吗？删除后该用户的所有数据（交易记录、持仓、资金、登录记录等）将被永久清除，此操作不可撤销！\n请输入当前管理员密码：",
     "delete_group_confirm": "确定要删除群组 \"{groupName}\" 吗？如果群组中仍有成员，请先将所有成员移除。\n请输入当前管理员密码：",
     "input_admin_password": "请输入管理员密码确认",
-    "wrong_password": "管理员密码错误"
+    "wrong_password": "管理员密码错误",
+    "sync_stock_data": "同步股票数据",
+    "start_sync": "开始同步",
+    "syncing": "同步中",
+    "sync_total": "待同步",
+    "sync_completed": "已完成",
+    "sync_success": "成功",
+    "sync_fail": "失败",
+    "sync_current": "当前",
+    "sync_duration": "耗时",
+    "sync_history": "同步历史",
+    "sync_running": "运行中",
+    "sync_completed_status": "已完成",
+    "sync_failed_status": "失败",
+    "sync_already_running": "该市场已有正在进行的同步任务",
+    "sync_not_running": "没有正在进行的同步任务",
+    "view_failed_detail": "查看失败详情",
+    "failed_stocks": "失败股票列表",
+    "error_reason": "错误原因",
+    "no_failed_stocks": "无失败记录",
+    "sync_detail": "同步详情",
+    "sync_cancel": "取消同步",
+    "sync_cancelled_status": "已取消",
+    "sync_cancel_confirm": "确定要取消当前同步任务吗？",
+    "sync_cancelled": "同步任务已取消"
   },
   "trade": {
     "buy": "买入",

@@ -313,6 +313,28 @@ const MessageReply = sequelize.define('MessageReply', {
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'message_replies', timestamps: false })
 
+/**
+ * StockSyncRecord model — table: stock_sync_records
+ * Records of stock data sync operations triggered from the admin panel.
+ * Fields: id, market_type, status, total_count, completed_count, success_count,
+ *   fail_count, failed_stocks, current_stock, started_at, finished_at, duration_sec, created_at
+ */
+const StockSyncRecord = sequelize.define('StockSyncRecord', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  market_type: { type: DataTypes.TINYINT, allowNull: false },
+  status: { type: DataTypes.STRING(20), defaultValue: 'running' },
+  total_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  completed_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  success_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  fail_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  failed_stocks: { type: DataTypes.TEXT('medium') },
+  current_stock: { type: DataTypes.STRING(50) },
+  started_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  finished_at: { type: DataTypes.DATE },
+  duration_sec: { type: DataTypes.INTEGER, defaultValue: 0 },
+  created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, { tableName: 'stock_sync_records', timestamps: false })
+
 module.exports = {
   sequelize,
   User,
@@ -332,5 +354,6 @@ module.exports = {
   CommissionHistory,
   GroupMessage,
   MessageLike,
-  MessageReply
+  MessageReply,
+  StockSyncRecord
 }

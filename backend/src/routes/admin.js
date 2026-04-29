@@ -13,9 +13,10 @@
 const express = require('express')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
-const { sequelize, AdminUser, Group, User, UserGroup, UserBalance, Position, Transaction, StockPool, StockPricesCache, InviteCode, CommissionConfig, LoginHistory, MarketConfig, CommissionHistory, GroupMessage } = require('../models')
+const { sequelize, AdminUser, Group, User, UserGroup, UserBalance, Position, Transaction, StockPool, StockPricesCache, InviteCode, CommissionConfig, LoginHistory, MarketConfig, CommissionHistory, GroupMessage, StockSyncRecord } = require('../models')
 const { Op } = require('sequelize')
 const commissionService = require('../services/commission')
+const stockSync = require('../services/stockSync')
 
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'virtual-stock-secret-key-2024'
@@ -1261,6 +1262,168 @@ router.post('/stocks/refresh', async (req, res) => {
   try {
     const { market_type } = req.body
     res.json({ code: 0, message: '刷新功能需要实现股票服务' })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/stocks/sync
+ * Start syncing missing historical K-line data for a given market type.
+ * Body: { market_type }
+ * Response: { code, data: { id } }
+ */
+router.post('/stocks/sync', async (req, res) => {
+  try {
+    const { market_type } = req.body
+    if (!market_type || ![1, 2, 3].includes(Number(market_type))) {
+      return res.json({ code: -1, message: '无效的市场类型' })
+    }
+
+    const running = await StockSyncRecord.findOne({
+      where: { market_type, status: 'running' }
+    })
+    if (running) {
+      return res.json({ code: -1, message: '该市场已有正在进行的同步任务' })
+    }
+
+    const record = await StockSyncRecord.create({
+      market_type: Number(market_type),
+      status: 'running',
+      started_at: new Date()
+    })
+
+    setTimeout(() => stockSync.startSync(Number(market_type), record.id), 0)
+
+    res.json({ code: 0, data: { id: record.id } })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * GET /api/v1/admin/stocks/sync/progress/:id
+ * Get the progress of a sync operation.
+ * Response: { code, data: { id, market_type, status, total_count, completed_count,
+ *   success_count, fail_count, current_stock, duration_sec, finished_at } }
+ */
+router.get('/stocks/sync/progress/:id', async (req, res) => {
+  try {
+    const record = await StockSyncRecord.findByPk(req.params.id)
+    if (!record) {
+      return res.json({ code: -1, message: '记录不存在' })
+    }
+
+    res.json({ code: 0, data: {
+      id: record.id,
+      market_type: record.market_type,
+      status: record.status,
+      total_count: record.total_count,
+      completed_count: record.completed_count,
+      success_count: record.success_count,
+      fail_count: record.fail_count,
+      current_stock: record.current_stock || '',
+      duration_sec: record.duration_sec,
+      finished_at: record.finished_at
+    }})
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * GET /api/v1/admin/stocks/sync/history
+ * Get sync operation history with pagination.
+ * Query: { page?, pageSize? }
+ * Response: { code, data: { list, total } }
+ */
+router.get('/stocks/sync/history', async (req, res) => {
+  try {
+    const { page = 1, pageSize = 10 } = req.query
+
+    const { count, rows } = await StockSyncRecord.findAndCountAll({
+      order: [['created_at', 'DESC']],
+      limit: parseInt(pageSize),
+      offset: (page - 1) * pageSize
+    })
+
+    const list = rows.map(r => ({
+      id: r.id,
+      market_type: r.market_type,
+      status: r.status,
+      total_count: r.total_count,
+      success_count: r.success_count,
+      fail_count: r.fail_count,
+      duration_sec: r.duration_sec,
+      started_at: r.started_at,
+      finished_at: r.finished_at
+    }))
+
+    res.json({ code: 0, data: { list, total: count } })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * GET /api/v1/admin/stocks/sync/history/:id
+ * Get sync record detail including failed stocks list.
+ * Response: { code, data: { ...record, failed_stocks: [] } }
+ */
+router.get('/stocks/sync/history/:id', async (req, res) => {
+  try {
+    const record = await StockSyncRecord.findByPk(req.params.id)
+    if (!record) {
+      return res.json({ code: -1, message: '记录不存在' })
+    }
+
+    let failedStocks = []
+    try {
+      if (record.failed_stocks) {
+        failedStocks = JSON.parse(record.failed_stocks)
+      }
+    } catch (e) {
+      failedStocks = []
+    }
+
+    res.json({ code: 0, data: {
+      id: record.id,
+      market_type: record.market_type,
+      status: record.status,
+      total_count: record.total_count,
+      completed_count: record.completed_count,
+      success_count: record.success_count,
+      fail_count: record.fail_count,
+      failed_stocks: failedStocks,
+      duration_sec: record.duration_sec,
+      started_at: record.started_at,
+      finished_at: record.finished_at
+    }})
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/stocks/sync/cancel/:id
+ * Cancel a running sync operation. Updates status to 'cancelled' and signals
+ * the sync process to stop.
+ * Response: { code, message }
+ */
+router.post('/stocks/sync/cancel/:id', async (req, res) => {
+  try {
+    const record = await StockSyncRecord.findByPk(req.params.id)
+    if (!record) {
+      return res.json({ code: -1, message: '记录不存在' })
+    }
+    if (record.status !== 'running') {
+      return res.json({ code: -1, message: '该任务不在运行中' })
+    }
+
+    await record.update({ status: 'cancelled', finished_at: new Date() })
+    stockSync.setCancelled(record.id)
+
+    res.json({ code: 0, message: '已取消同步任务' })
   } catch (err) {
     res.json({ code: -1, message: err.message })
   }

@@ -21,7 +21,8 @@
     "login": "Login",
     "register": "Register",
     "logout": "Logout",
-    "no_data": "No data"
+    "no_data": "No data",
+    "refresh": "Refresh"
   },
   "auth": {
     "login": "Login",
@@ -336,7 +337,31 @@
     "delete_user_confirm": "Are you sure you want to delete user \"{username}\"? All data (transactions, positions, balances, login history, etc.) will be permanently removed. This action CANNOT be undone!\nEnter the current admin password:",
     "delete_group_confirm": "Are you sure you want to delete group \"{groupName}\"? If the group still has members, please remove them first.\nEnter the current admin password:",
     "input_admin_password": "Enter admin password to confirm",
-    "wrong_password": "Incorrect admin password"
+    "wrong_password": "Incorrect admin password",
+    "sync_stock_data": "Sync Stock Data",
+    "start_sync": "Start Sync",
+    "syncing": "Syncing",
+    "sync_total": "Total",
+    "sync_completed": "Completed",
+    "sync_success": "Success",
+    "sync_fail": "Failed",
+    "sync_current": "Current",
+    "sync_duration": "Duration",
+    "sync_history": "Sync History",
+    "sync_running": "Running",
+    "sync_completed_status": "Completed",
+    "sync_failed_status": "Failed",
+    "sync_already_running": "A sync task is already running for this market",
+    "sync_not_running": "No sync task is running",
+    "view_failed_detail": "View Failed Details",
+    "failed_stocks": "Failed Stocks",
+    "error_reason": "Error Reason",
+    "no_failed_stocks": "No failed records",
+    "sync_detail": "Sync Details",
+    "sync_cancel": "Cancel Sync",
+    "sync_cancelled_status": "Cancelled",
+    "sync_cancel_confirm": "Are you sure you want to cancel the current sync?",
+    "sync_cancelled": "Sync cancelled"
   },
   "trade": {
     "buy": "Buy",

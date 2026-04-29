@@ -395,3 +395,24 @@ INSERT INTO market_config (market_type, refresh_time, trade_start, trade_end) VA
 (2, '09:30', '09:30', '16:00'),
 (3, '04:00', '09:30', '16:00')
 ON DUPLICATE KEY UPDATE refresh_time = VALUES(refresh_time);
+
+-- ============================================================
+-- 23. 股票同步记录表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS stock_sync_records (
+  id              INT PRIMARY KEY AUTO_INCREMENT,
+  market_type     TINYINT NOT NULL COMMENT '市场: 1A股 2港股 3美股',
+  status          VARCHAR(20) DEFAULT 'running' COMMENT '状态: running/completed/failed',
+  total_count     INT DEFAULT 0 COMMENT '待同步股票总数',
+  completed_count INT DEFAULT 0 COMMENT '已处理数量',
+  success_count   INT DEFAULT 0 COMMENT '成功数量',
+  fail_count      INT DEFAULT 0 COMMENT '失败数量',
+  failed_stocks   MEDIUMTEXT COMMENT '失败股票详情(JSON)',
+  current_stock   VARCHAR(50) COMMENT '当前处理的股票代码',
+  started_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  finished_at     DATETIME,
+  duration_sec    INT DEFAULT 0 COMMENT '耗时秒数',
+  created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_market_status (market_type, status),
+  INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -366,6 +366,93 @@
           <el-card style="margin-top: 20px;">
             <template #header>
               <div class="card-header">
+                <span>{{ $t('admin.sync_stock_data') }}</span>
+                <div>
+                  <el-select v-model="syncMarketType" style="width: 120px; margin-right: 10px;">
+                    <el-option :label="$t('market.a_share')" :value="1" />
+                    <el-option :label="$t('market.hk_stock')" :value="2" />
+                    <el-option :label="$t('market.us_stock')" :value="3" />
+                  </el-select>
+                  <el-button type="primary" :loading="syncLoading" :disabled="syncLoading" @click="startSync">
+                    {{ syncLoading ? $t('admin.syncing') : $t('admin.start_sync') }}
+                  </el-button>
+                </div>
+              </div>
+            </template>
+            <div v-if="syncLoading || syncProgress.status === 'completed' || syncProgress.status === 'failed' || syncProgress.status === 'cancelled'" style="padding: 10px 0;">
+              <el-progress :percentage="syncPercentage" :status="syncProgress.status === 'failed' || syncProgress.status === 'cancelled' ? 'exception' : (syncPercentage >= 100 ? 'success' : undefined)" />
+              <div style="display: flex; gap: 20px; margin-top: 12px; font-size: 14px; color: #666; align-items: center;">
+                <span>{{ $t('admin.sync_total') }}: {{ syncProgress.total_count || 0 }}</span>
+                <span>{{ $t('admin.sync_completed') }}: {{ syncProgress.completed_count || 0 }}</span>
+                <span style="color: #67c23a;">{{ $t('admin.sync_success') }}: {{ syncProgress.success_count || 0 }}</span>
+                <span v-if="syncProgress.fail_count > 0" style="color: #f56c6c;">{{ $t('admin.sync_fail') }}: {{ syncProgress.fail_count }}</span>
+                <span v-if="syncProgress.current_stock">{{ $t('admin.sync_current') }}: {{ syncProgress.current_stock }}</span>
+                <span>{{ $t('admin.sync_duration') }}: {{ formatDuration(syncProgress.duration_sec || 0) }}</span>
+                <el-button v-if="syncProgress.status === 'running'" type="danger" size="small" :loading="cancelling" @click="cancelSync">
+                  {{ $t('admin.sync_cancel') }}
+                </el-button>
+              </div>
+            </div>
+            <div v-else style="padding: 20px 0; text-align: center; color: #999;">
+              {{ $t('admin.sync_not_running') }}
+            </div>
+          </el-card>
+
+          <el-card style="margin-top: 20px;">
+            <template #header>
+              <div class="card-header">
+                <span>{{ $t('admin.sync_history') }}</span>
+                <el-button size="small" @click="loadSyncHistory">{{ $t('common.refresh') }}</el-button>
+              </div>
+            </template>
+            <el-table :data="syncHistoryList" stripe @row-click="viewSyncDetail">
+              <el-table-column prop="id" :label="$t('admin.id')" width="60" />
+              <el-table-column :label="$t('admin.market')" width="80">
+                <template #default="{ row }">{{ getMarketLabel(row.market_type) }}</template>
+              </el-table-column>
+              <el-table-column :label="$t('admin.status')" width="90">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 'completed' ? 'success' : (row.status === 'running' ? 'warning' : (row.status === 'cancelled' ? 'info' : 'danger'))" size="small">
+                    {{ row.status === 'completed' ? $t('admin.sync_completed_status') : (row.status === 'running' ? $t('admin.sync_running') : (row.status === 'cancelled' ? $t('admin.sync_cancelled_status') : $t('admin.sync_failed_status'))) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column :label="$t('admin.sync_total')" width="80">
+                <template #default="{ row }">{{ row.total_count || 0 }}</template>
+              </el-table-column>
+              <el-table-column :label="$t('admin.sync_success')" width="80">
+                <template #default="{ row }"><span style="color: #67c23a;">{{ row.success_count || 0 }}</span></template>
+              </el-table-column>
+              <el-table-column :label="$t('admin.sync_fail')" width="80">
+                <template #default="{ row }"><span v-if="row.fail_count > 0" style="color: #f56c6c;">{{ row.fail_count }}</span><span v-else>0</span></template>
+              </el-table-column>
+              <el-table-column :label="$t('admin.sync_duration')" width="100">
+                <template #default="{ row }">{{ formatDuration(row.duration_sec) }}</template>
+              </el-table-column>
+              <el-table-column prop="started_at" :label="$t('admin.update_time')" width="160">
+                <template #default="{ row }">{{ new Date(row.started_at).toLocaleString() }}</template>
+              </el-table-column>
+              <el-table-column :label="$t('common.operation')" width="100">
+                <template #default="{ row }">
+                  <el-button size="small" type="primary" link @click.stop="viewSyncDetail(row)">{{ $t('admin.sync_detail') }}</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="pagination-wrap">
+              <el-pagination
+                v-model:current-page="syncHistoryPage"
+                :page-size="10"
+                :total="syncHistoryTotal"
+                layout="prev, pager, next, total"
+                size="small"
+                @current-change="loadSyncHistory"
+              />
+            </div>
+          </el-card>
+
+          <el-card style="margin-top: 20px;">
+            <template #header>
+              <div class="card-header">
                 <span>{{ $t('admin.missing_data') }}</span>
                 <el-button type="primary" size="small" @click="checkMissing">{{ $t('admin.check_missing') }}</el-button>
               </div>
@@ -864,6 +951,41 @@
         <el-button @click="showUserTransactionsDialog = false">{{ $t('common.close') }}</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="showSyncDetailDialog" :title="$t('admin.sync_detail')" width="700px">
+      <template v-if="syncDetailData">
+        <el-descriptions :column="2" border style="margin-bottom: 16px;">
+          <el-descriptions-item :label="$t('admin.market')">{{ getMarketLabel(syncDetailData.market_type) }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('admin.status')">
+            <el-tag :type="syncDetailData.status === 'completed' ? 'success' : (syncDetailData.status === 'running' ? 'warning' : (syncDetailData.status === 'cancelled' ? 'info' : 'danger'))" size="small">
+              {{ syncDetailData.status === 'completed' ? $t('admin.sync_completed_status') : (syncDetailData.status === 'running' ? $t('admin.sync_running') : (syncDetailData.status === 'cancelled' ? $t('admin.sync_cancelled_status') : $t('admin.sync_failed_status'))) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item :label="$t('admin.sync_total')">{{ syncDetailData.total_count || 0 }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('admin.sync_completed')">{{ syncDetailData.completed_count || 0 }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('admin.sync_success')"><span style="color: #67c23a;">{{ syncDetailData.success_count || 0 }}</span></el-descriptions-item>
+          <el-descriptions-item :label="$t('admin.sync_fail')"><span v-if="syncDetailData.fail_count > 0" style="color: #f56c6c;">{{ syncDetailData.fail_count }}</span><span v-else>0</span></el-descriptions-item>
+          <el-descriptions-item :label="$t('admin.sync_duration')">{{ formatDuration(syncDetailData.duration_sec) }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('admin.update_time')">{{ new Date(syncDetailData.started_at).toLocaleString() }}</el-descriptions-item>
+        </el-descriptions>
+        <div v-if="syncDetailData.failed_stocks && syncDetailData.failed_stocks.length > 0">
+          <h4 style="margin-bottom: 8px;">{{ $t('admin.failed_stocks') }}</h4>
+          <el-table :data="syncDetailData.failed_stocks" size="small" max-height="300">
+            <el-table-column prop="stock_code" :label="$t('admin.code')" width="100" />
+            <el-table-column prop="stock_name" :label="$t('admin.stock_name')" />
+            <el-table-column prop="error" :label="$t('admin.error_reason')">
+              <template #default="{ row }"><span style="color: #f56c6c;">{{ row.error }}</span></template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <div v-else style="text-align: center; color: #999; padding: 20px;">
+          {{ $t('admin.no_failed_stocks') }}
+        </div>
+      </template>
+      <template #footer>
+        <el-button @click="showSyncDetailDialog = false">{{ $t('common.close') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -878,12 +1000,12 @@
  * Version History:
  *   - 2024-01-01: Initial version
  */
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { i18n } from '@/i18n'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getStats, getGroups, createGroup as createGroupAPI, deleteGroup as deleteGroupAPI, getUsers, toggleUserStatus as toggleUserStatusAPI, deleteUser as deleteUserAPI, getStocks, getStockPositions, createStock as createStockAPI, deleteStock as deleteStockAPI, getInviteCodes, createInviteCode, getCommissionConfigs, updateCommissionConfig, getCommissionHistory, getMarketConfig, updateMarketConfig, getMissingStocks, getGroupStatistics, getUserStatistics, getUserDetail, getUserLoginHistory, getUserTransactions, setTradeEnabled, setAdminAccess, getGroupUsers as getGroupUsersAPI, addGroupUser as addGroupUserAPI, removeGroupUser as removeGroupUserAPI, payDividend, doAllotment, getUserFundFlow } from '@/api/admin'
+import { getStats, getGroups, createGroup as createGroupAPI, deleteGroup as deleteGroupAPI, getUsers, toggleUserStatus as toggleUserStatusAPI, deleteUser as deleteUserAPI, getStocks, getStockPositions, createStock as createStockAPI, deleteStock as deleteStockAPI, getInviteCodes, createInviteCode, getCommissionConfigs, updateCommissionConfig, getCommissionHistory, getMarketConfig, updateMarketConfig, getMissingStocks, getGroupStatistics, getUserStatistics, getUserDetail, getUserLoginHistory, getUserTransactions, setTradeEnabled, setAdminAccess, getGroupUsers as getGroupUsersAPI, addGroupUser as addGroupUserAPI, removeGroupUser as removeGroupUserAPI, payDividend, doAllotment, getUserFundFlow, startStockSync, getStockSyncProgress, getStockSyncHistory, getStockSyncDetail, cancelStockSync } from '@/api/admin'
 import { getVersion } from '@/api/about'
 
 const router = useRouter()
@@ -963,8 +1085,34 @@ const availableUsers = ref([])
 const searchUserKeyword = ref('')
 const loadingAvailableUsers = ref(false)
 
+const syncMarketType = ref(1)
+const syncLoading = ref(false)
+const syncProgress = ref({})
+const syncTimer = ref(null)
+const syncHistoryList = ref([])
+const syncHistoryPage = ref(1)
+const syncHistoryTotal = ref(0)
+const showSyncDetailDialog = ref(false)
+const syncDetailData = ref(null)
+const cancelling = ref(false)
+const syncRecordId = ref(null)
+
+const syncPercentage = computed(() => {
+  const total = syncProgress.value.total_count || 0
+  const completed = syncProgress.value.completed_count || 0
+  if (total === 0) return 0
+  return Math.round((completed / total) * 100)
+})
+
 onMounted(() => {
   fetchData()
+})
+
+onUnmounted(() => {
+  if (syncTimer.value) {
+    clearInterval(syncTimer.value)
+    syncTimer.value = null
+  }
 })
 
 /**
@@ -1014,6 +1162,97 @@ const loadGroupStats = async () => {
  */
 const loadUserStats = async () => {
   userStats.value = await getUserStatistics().then(r => r.data || [])
+}
+
+const formatDuration = (sec) => {
+  if (!sec) return '0:00'
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+const startSync = async () => {
+  try {
+    const res = await startStockSync({ market_type: syncMarketType.value })
+    if (res.code !== 0) {
+      ElMessage.error(res.message || t('admin.operate_failed'))
+      return
+    }
+    syncLoading.value = true
+    syncRecordId.value = res.data.id
+    cancelling.value = false
+    syncProgress.value = { status: 'running', total_count: 0, completed_count: 0, success_count: 0, fail_count: 0, current_stock: '', duration_sec: 0 }
+    pollSyncProgress(res.data.id)
+  } catch (err) {
+    ElMessage.error(err.message || t('admin.operate_failed'))
+  }
+}
+
+const cancelSync = async () => {
+  try {
+    await ElMessageBox.confirm(t('admin.sync_cancel_confirm'), t('common.confirm'), {
+      confirmButtonText: t('admin.sync_cancel'),
+      cancelButtonText: t('common.cancel'),
+      type: 'warning'
+    })
+    cancelling.value = true
+    await cancelStockSync(syncRecordId.value)
+  } catch (err) {
+    if (err !== 'cancel') {
+      ElMessage.error(err.message || t('admin.operate_failed'))
+    }
+    cancelling.value = false
+  }
+}
+
+const pollSyncProgress = (id) => {
+  syncTimer.value = setInterval(async () => {
+    try {
+      const res = await getStockSyncProgress(id)
+      if (res.code === 0 && res.data) {
+        syncProgress.value = res.data
+        if (res.data.status === 'completed' || res.data.status === 'failed' || res.data.status === 'cancelled') {
+          clearInterval(syncTimer.value)
+          syncTimer.value = null
+          syncLoading.value = false
+          if (res.data.status === 'completed') {
+            ElMessage.success(t('admin.update_success'))
+          } else if (res.data.status === 'cancelled') {
+            ElMessage.info(t('admin.sync_cancelled'))
+          }
+          loadSyncHistory()
+        }
+      }
+    } catch (err) {
+      clearInterval(syncTimer.value)
+      syncTimer.value = null
+      syncLoading.value = false
+      console.error('Poll sync progress error:', err)
+    }
+  }, 5000)
+}
+
+const loadSyncHistory = async () => {
+  try {
+    const params = { page: syncHistoryPage.value, pageSize: 10 }
+    const res = await getStockSyncHistory(params)
+    syncHistoryList.value = res.data?.list || []
+    syncHistoryTotal.value = res.data?.total || 0
+  } catch (err) {
+    console.error('Load sync history error:', err)
+  }
+}
+
+const viewSyncDetail = async (row) => {
+  try {
+    const res = await getStockSyncDetail(row.id)
+    if (res.code === 0 && res.data) {
+      syncDetailData.value = res.data
+      showSyncDetailDialog.value = true
+    }
+  } catch (err) {
+    ElMessage.error(err.message || t('admin.operate_failed'))
+  }
 }
 
 /**
@@ -1154,6 +1393,32 @@ const handleMenuSelect = (index) => {
   activeMenu.value = index
   if (index === 'about') {
     loadAbout()
+  }
+  if (index === 'market-config') {
+    loadSyncHistory()
+    checkRunningSync()
+  } else {
+    if (syncTimer.value) {
+      clearInterval(syncTimer.value)
+      syncTimer.value = null
+    }
+  }
+}
+
+const checkRunningSync = async () => {
+  try {
+    const res = await getStockSyncHistory({ page: 1, pageSize: 1 })
+    const list = res.data?.list || []
+    const running = list.find(r => r.status === 'running')
+    if (running) {
+      syncLoading.value = true
+      syncRecordId.value = running.id
+      cancelling.value = false
+      syncProgress.value = { status: 'running', total_count: 0, completed_count: 0, success_count: 0, fail_count: 0, current_stock: '', duration_sec: 0 }
+      pollSyncProgress(running.id)
+    }
+  } catch (err) {
+    console.error('Check running sync error:', err)
   }
 }
 
