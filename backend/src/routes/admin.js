@@ -14,6 +14,7 @@ const express = require('express')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { sequelize, AdminUser, Group, User, UserGroup, UserBalance, Position, Transaction, StockPool, StockPricesCache, InviteCode, CommissionConfig, LoginHistory, MarketConfig, CommissionHistory, GroupMessage, StockSyncRecord } = require('../models')
+const { pinyin } = require('pinyin-pro')
 const { Op } = require('sequelize')
 const commissionService = require('../services/commission')
 const stockSync = require('../services/stockSync')
@@ -733,7 +734,8 @@ router.post('/stocks', async (req, res) => {
       return res.json({ code: -1, message: '股票已存在' })
     }
 
-    const pool = await StockPool.create({ stock_code, stock_name, market_type })
+    const pinyin_abbr = pinyin(stock_name, { pattern: 'first', type: 'array' }).join('').toUpperCase()
+    const pool = await StockPool.create({ stock_code, stock_name, pinyin_abbr, market_type })
     res.json({ code: 0, data: pool })
   } catch (err) {
     res.json({ code: -1, message: err.message })

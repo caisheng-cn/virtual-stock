@@ -205,7 +205,7 @@ const confirmSell = async () => {
 <style scoped>
 .positions-container {
   padding: 20px;
-  background-color: #f5f5f5;
+  background-color: var(--color-bg);
   min-height: 100vh;
 }
 
@@ -214,8 +214,8 @@ const confirmSell = async () => {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: white;
-  border-radius: 8px;
+  background: var(--color-card);
+  border-radius: var(--radius-card);
   margin-bottom: 20px;
 }
 
@@ -226,27 +226,43 @@ const confirmSell = async () => {
 }
 
 .profit {
-  color: #f56c6c;
+  color: var(--color-up);
+  font-weight: 600;
 }
 
 .loss {
-  color: #67c23a;
+  color: var(--color-down);
+  font-weight: 600;
 }
 
 .empty {
   text-align: center;
   padding: 40px;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 
 .sell-info {
   padding: 10px;
-  background: #f5f5f5;
-  border-radius: 4px;
+  background: var(--color-bg);
+  border-radius: var(--radius-btn);
   margin-bottom: 20px;
 }
 
 .sell-info p {
   margin: 5px 0;
+}
+
+@media (max-width: 768px) {
+  .positions-container {
+    padding: 12px;
+  }
+  .header {
+    padding: 14px 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  :deep(.el-dialog) {
+    width: 92% !important;
+  }
 }
 </style>

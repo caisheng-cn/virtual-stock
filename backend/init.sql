@@ -2,9 +2,7 @@
 -- 虚拟炒股平台 - 完整数据库建表脚本
 -- 数据库: virtual_stock
 -- 字符集: utf8mb4
--- 说明: 合并了 init.sql + migration-commission.sql
---       + migration-profit.sql + migration-admin.sql
---       + models/index.js 中定义的所有字段
+-- 说明: 自动从当前数据库结构生成
 -- ============================================================
 
 CREATE DATABASE IF NOT EXISTS virtual_stock
@@ -17,19 +15,20 @@ USE virtual_stock;
 -- 1. 用户表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS users (
-  id            INT PRIMARY KEY AUTO_INCREMENT,
-  username      VARCHAR(50) NOT NULL UNIQUE,
-  password      VARCHAR(255) NOT NULL,
-  nickname      VARCHAR(50),
-  email         VARCHAR(100),
-  phone         VARCHAR(20),
-  status        TINYINT DEFAULT 1 COMMENT '状态: 0禁用 1正常',
-  trade_enabled TINYINT DEFAULT 1 COMMENT '交易权限: 0禁用 1启用',
-  admin_access  TINYINT DEFAULT 0 COMMENT '后台访问: 0无 1有',
+  id              INT PRIMARY KEY AUTO_INCREMENT,
+  username        VARCHAR(50) NOT NULL,
+  password        VARCHAR(255) NOT NULL,
+  nickname        VARCHAR(50),
+  email           VARCHAR(100),
+  phone           VARCHAR(20),
+  status          TINYINT DEFAULT 1 COMMENT '状态: 0禁用 1正常',
+  trade_enabled   TINYINT DEFAULT 1 COMMENT '交易权限: 0禁用 1启用',
+  admin_access    TINYINT DEFAULT 0 COMMENT '后台访问: 0无 1有',
   last_trade_date DATE,
-  language      VARCHAR(10) DEFAULT 'zh-CN',
-  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  language        VARCHAR(10) DEFAULT 'zh-CN',
+  created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_username (username),
   INDEX idx_username (username),
   INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -39,13 +38,14 @@ CREATE TABLE IF NOT EXISTS users (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `groups` (
   id          INT PRIMARY KEY AUTO_INCREMENT,
-  name        VARCHAR(100) NOT NULL UNIQUE,
+  name        VARCHAR(100) NOT NULL,
   description VARCHAR(500),
   init_cash   DECIMAL(15,2) DEFAULT 100000.00 COMMENT '初始化资金',
   currency    VARCHAR(10) DEFAULT 'USD',
   status      TINYINT DEFAULT 1 COMMENT '状态: 0禁用 1正常',
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_name (name),
   INDEX idx_name (name),
   INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -54,10 +54,11 @@ CREATE TABLE IF NOT EXISTS `groups` (
 -- 3. 用户群组关联表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS user_groups (
-  id        INT PRIMARY KEY AUTO_INCREMENT,
-  user_id   INT NOT NULL,
-  group_id  INT NOT NULL,
-  joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  id                   INT PRIMARY KEY AUTO_INCREMENT,
+  user_id              INT NOT NULL,
+  group_id             INT NOT NULL,
+  joined_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_read_message_id INT DEFAULT 0,
   UNIQUE KEY uk_user_group (user_id, group_id),
   INDEX idx_user_id (user_id),
   INDEX idx_group_id (group_id)
@@ -130,6 +131,7 @@ CREATE TABLE IF NOT EXISTS stock_pools (
   id          INT PRIMARY KEY AUTO_INCREMENT,
   stock_code  VARCHAR(20) NOT NULL,
   stock_name  VARCHAR(100) NOT NULL,
+  pinyin_abbr VARCHAR(50) DEFAULT '' COMMENT '拼音首字母缩写',
   market_type TINYINT NOT NULL,
   status      TINYINT DEFAULT 1,
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -204,8 +206,8 @@ CREATE TABLE IF NOT EXISTS group_ranking_cache (
   profit_rate  DECIMAL(10,4),
   `rank`       INT,
   updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_group_rank (group_id, `rank`),
-  UNIQUE KEY uk_group_user (group_id, user_id)
+  UNIQUE KEY uk_group_user (group_id, user_id),
+  UNIQUE KEY uk_group_rank (group_id, `rank`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -213,13 +215,14 @@ CREATE TABLE IF NOT EXISTS group_ranking_cache (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS invite_codes (
   id          INT PRIMARY KEY AUTO_INCREMENT,
-  code        VARCHAR(20) NOT NULL UNIQUE,
+  code        VARCHAR(20) NOT NULL,
   group_id    INT NOT NULL,
   expire_date DATE,
   use_limit   INT,
   used_count  INT DEFAULT 0,
   status      TINYINT DEFAULT 1,
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_code (code),
   INDEX idx_group_id (group_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -228,12 +231,13 @@ CREATE TABLE IF NOT EXISTS invite_codes (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS admin_users (
   id          INT PRIMARY KEY AUTO_INCREMENT,
-  username    VARCHAR(50) NOT NULL UNIQUE,
+  username    VARCHAR(50) NOT NULL,
   password    VARCHAR(255) NOT NULL,
   permissions VARCHAR(500) DEFAULT '',
   status      TINYINT DEFAULT 1,
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -241,10 +245,11 @@ CREATE TABLE IF NOT EXISTS admin_users (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS system_configs (
   id           INT PRIMARY KEY AUTO_INCREMENT,
-  config_key   VARCHAR(50) NOT NULL UNIQUE,
+  config_key   VARCHAR(50) NOT NULL,
   config_value TEXT,
   description  VARCHAR(200),
-  updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_config_key (config_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -280,7 +285,7 @@ CREATE TABLE IF NOT EXISTS commission_configs (
 CREATE TABLE IF NOT EXISTS login_history (
   id         INT PRIMARY KEY AUTO_INCREMENT,
   user_id    INT NOT NULL,
-  login_time DATETIME DEFAULT NOW(),
+  login_time DATETIME DEFAULT CURRENT_TIMESTAMP,
   ip_address VARCHAR(50),
   user_agent VARCHAR(255),
   INDEX idx_user_login (user_id, login_time),
@@ -297,7 +302,7 @@ CREATE TABLE IF NOT EXISTS market_config (
   trade_start  VARCHAR(10),
   trade_end    VARCHAR(10),
   enabled      TINYINT DEFAULT 1,
-  created_at   DATETIME DEFAULT NOW(),
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_market (market_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -359,43 +364,6 @@ CREATE TABLE IF NOT EXISTS message_replies (
   INDEX idx_message (message_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- user_groups表添加已读消息ID字段
-ALTER TABLE user_groups ADD COLUMN IF NOT EXISTS last_read_message_id INT DEFAULT 0;
-
--- ============================================================
--- 种子数据
--- ============================================================
-
--- 默认管理员 (admin / admin123)
-INSERT INTO admin_users (username, password, permissions, status)
-VALUES ('admin', '$2a$10$saphqmfZtE7T/TAJumqw9ebPShnvSHE6IfM7ER/q6wFZjteX0krt6', 'all', 1);
-
--- 默认群组
-INSERT INTO `groups` (name, description, init_cash, currency, status)
-VALUES ('默认群组', '默认虚拟炒股群组', 100000.00, 'USD', 1);
-
--- 默认邀请码
-INSERT INTO invite_codes (code, group_id, use_limit, status)
-VALUES ('DEFAULT2024', 1, 100, 1);
-
--- 佣金配置 (rate = 千分比 ‰)
--- A股: 千分之0.5 (=万分之5=0.05%) | 港股: 千分之1 (=0.1%) | 美股: 千分之5 (=0.5%)
-INSERT INTO commission_configs (market_type, trade_type, commission_rate) VALUES
-(1, 1, 0.5),
-(1, 2, 0.5),
-(2, 1, 1),
-(2, 2, 1),
-(3, 1, 5),
-(3, 2, 5)
-ON DUPLICATE KEY UPDATE commission_rate = VALUES(commission_rate);
-
--- 市场时间配置
-INSERT INTO market_config (market_type, refresh_time, trade_start, trade_end) VALUES
-(1, '09:00', '09:30', '15:00'),
-(2, '09:30', '09:30', '16:00'),
-(3, '04:00', '09:30', '16:00')
-ON DUPLICATE KEY UPDATE refresh_time = VALUES(refresh_time);
-
 -- ============================================================
 -- 23. 股票同步记录表
 -- ============================================================
@@ -416,3 +384,36 @@ CREATE TABLE IF NOT EXISTS stock_sync_records (
   INDEX idx_market_status (market_type, status),
   INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 种子数据
+-- ============================================================
+
+-- 默认管理员 (admin / admin123)
+INSERT IGNORE INTO admin_users (username, password, permissions, status)
+VALUES ('admin', '$2a$10$saphqmfZtE7T/TAJumqw9ebPShnvSHE6IfM7ER/q6wFZjteX0krt6', 'all', 1);
+
+-- 默认群组
+INSERT IGNORE INTO `groups` (name, description, init_cash, currency, status)
+VALUES ('默认群组', '默认虚拟炒股群组', 100000.00, 'USD', 1);
+
+-- 默认邀请码
+INSERT IGNORE INTO invite_codes (code, group_id, use_limit, status)
+VALUES ('DEFAULT2024', 1, 100, 1);
+
+-- 佣金配置 (rate = 千分比 ‰)
+INSERT INTO commission_configs (market_type, trade_type, commission_rate) VALUES
+(1, 1, 0.5),
+(1, 2, 0.5),
+(2, 1, 1),
+(2, 2, 1),
+(3, 1, 5),
+(3, 2, 5)
+ON DUPLICATE KEY UPDATE commission_rate = VALUES(commission_rate);
+
+-- 市场时间配置
+INSERT INTO market_config (market_type, refresh_time, trade_start, trade_end) VALUES
+(1, '09:00', '09:30', '15:00'),
+(2, '09:30', '09:30', '16:00'),
+(3, '04:00', '09:30', '16:00')
+ON DUPLICATE KEY UPDATE refresh_time = VALUES(refresh_time);

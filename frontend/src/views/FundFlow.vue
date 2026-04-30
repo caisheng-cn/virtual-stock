@@ -149,7 +149,7 @@ onMounted(() => {
 <style scoped>
 .fund-flow-container {
   padding: 20px;
-  background-color: #f5f5f5;
+  background-color: var(--color-bg);
   min-height: 100vh;
 }
 
@@ -158,8 +158,8 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: white;
-  border-radius: 8px;
+  background: var(--color-card);
+  border-radius: var(--radius-card);
   margin-bottom: 20px;
 }
 
@@ -167,21 +167,32 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .profit {
-  color: #f56c6c;
-  font-weight: bold;
+  color: var(--color-up);
+  font-weight: 600;
 }
 
 .loss {
-  color: #67c23a;
-  font-weight: bold;
+  color: var(--color-down);
+  font-weight: 600;
 }
 
 .empty {
   text-align: center;
   padding: 40px;
-  color: #999;
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 768px) {
+  .fund-flow-container {
+    padding: 12px;
+  }
+  .header {
+    padding: 14px 16px;
+  }
 }
 </style>

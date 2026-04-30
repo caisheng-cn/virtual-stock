@@ -8,9 +8,9 @@
       </div>
     </div>
 
-    <el-card class="balance-card">
+    <el-card class="balance-card" shadow="never">
       <el-row :gutter="20">
-        <el-col :span="8">
+        <el-col :xs="24" :sm="8">
           <div class="balance-item">
             <span class="label">{{ $t('transactions_page.account_balance') }}</span>
             <span class="value">{{ formatMoney(balance) }} RMB</span>
@@ -195,7 +195,7 @@ onMounted(() => {
 <style scoped>
 .transactions-container {
   padding: 20px;
-  background-color: #f5f5f5;
+  background-color: var(--color-bg);
   min-height: 100vh;
 }
 
@@ -204,8 +204,8 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: white;
-  border-radius: 8px;
+  background: var(--color-card);
+  border-radius: var(--radius-card);
   margin-bottom: 20px;
 }
 
@@ -222,30 +222,38 @@ onMounted(() => {
 
 .balance-item .label {
   font-size: 14px;
-  color: #999;
+  color: var(--color-text-secondary);
   margin-bottom: 5px;
 }
 
 .balance-item .value {
   font-size: 24px;
-  font-weight: bold;
-  color: #333;
+  font-weight: 700;
+  color: var(--color-text);
+  font-family: var(--font-num);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.header-buttons {
+  display: flex;
+  gap: 8px;
 }
 
 .empty {
   text-align: center;
   padding: 40px;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 
 .amount-cny {
-  color: #999;
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 
@@ -255,7 +263,19 @@ onMounted(() => {
 
 .commission-rate {
   font-size: 11px;
-  color: #999;
+  color: var(--color-text-secondary);
   margin-left: 2px;
+}
+
+@media (max-width: 768px) {
+  .transactions-container {
+    padding: 12px;
+  }
+  .header {
+    padding: 14px 16px;
+  }
+  .balance-item .value {
+    font-size: 20px;
+  }
 }
 </style>

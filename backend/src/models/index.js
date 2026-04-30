@@ -137,6 +137,7 @@ const StockPool = sequelize.define('StockPool', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   stock_code: { type: DataTypes.STRING(20), allowNull: false },
   stock_name: { type: DataTypes.STRING(100), allowNull: false },
+  pinyin_abbr: { type: DataTypes.STRING(50), defaultValue: '' },
   market_type: { type: DataTypes.TINYINT, allowNull: false },
   status: { type: DataTypes.TINYINT, defaultValue: 1 },
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }

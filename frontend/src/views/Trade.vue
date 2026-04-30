@@ -13,30 +13,38 @@
       </el-radio-group>
     </el-card>
 
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <el-card>
+    <el-row :gutter="[16, 16]">
+      <el-col :xs="24" :md="12">
+        <el-card shadow="never">
           <template #header>
             <div class="card-header">
               <span>{{ $t('trade_page.stock_list') }}</span>
-              <el-input v-model="keyword" :placeholder="$t('trade_page.search_stock')" style="width: 200px;" @input="handleSearch" />
             </div>
           </template>
-          <el-table :data="stocks" height="400" @row-click="handleRowClick">
-            <el-table-column prop="stock_code" :label="$t('trade_page.stock_code')" width="100" />
-            <el-table-column prop="stock_name" :label="$t('trade_page.stock_name')" />
-          </el-table>
-          <el-pagination
-            v-model:current-page="page"
-            :page-size="20"
-            :total="total"
-            layout="prev, pager, next"
-            @current-change="fetchStocks"
-          />
+          <el-select
+            v-model="selectedSearchStock"
+            filterable
+            remote
+            :remote-method="searchStocks"
+            :loading="searchLoading"
+            :placeholder="$t('trade_page.search_placeholder')"
+            @change="onStockSelected"
+            style="width:100%"
+            value-key="stock_code"
+            size="large"
+            clearable
+          >
+            <el-option
+              v-for="item in searchResults"
+              :key="item.stock_code"
+              :label="`${item.stock_code} ${item.stock_name}`"
+              :value="item"
+            />
+          </el-select>
         </el-card>
       </el-col>
 
-      <el-col :span="12">
+      <el-col :xs="24" :md="12">
         <el-card v-if="selectedStock">
           <template #header>
             <div class="card-header">
@@ -160,12 +168,12 @@ const tradeForm = reactive({
 })
 
 const marketType = ref(1)
-const keyword = ref('')
-const page = ref(1)
-const total = ref(0)
-const stocks = ref([])
 const selectedStock = ref(null)
 const stockQuote = ref(null)
+const searchResults = ref([])
+const searchLoading = ref(false)
+const selectedSearchStock = ref(null)
+let searchTimer = null
 const loading = ref(false)
 const chartContainer = ref(null)
 const klineType = ref('day')
@@ -261,7 +269,6 @@ const formatMoney = (value) => {
 }
 
 onMounted(() => {
-  fetchStocks()
   loadCommissionConfigs()
   window.addEventListener('resize', handleResize)
 })
@@ -540,57 +547,59 @@ const handleKlineTypeChange = () => {
 }
 
 /**
- * fetchStocks
- * Description: Fetches the stock list for the current market type with pagination and search keyword.
- * @returns {Promise<void>}
+ * searchStocks
+ * Description: Debounced stock search. Supports query by stock code, name, or pinyin initials.
+ * @param {string} query - The search keyword
+ * @returns {void}
  */
-const fetchStocks = async () => {
-  console.log('fetchStocks called, marketType:', marketType.value)
-  try {
-    const res = await getStockList({ market_type: marketType.value, page: page.value, pageSize: 20, keyword: keyword.value })
-    console.log('fetchStocks result:', res)
-    stocks.value = res.data.list
-    total.value = res.data.total
-  } catch (err) {
-    console.error('fetchStocks error:', err)
-    ElMessage.error(err.message || t('trade_page.trade_failed'))
+const searchStocks = (query) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  if (!query || !query.trim()) {
+    searchResults.value = []
+    return
   }
+  searchLoading.value = true
+  searchTimer = setTimeout(async () => {
+    try {
+      const res = await getStockList({ market_type: marketType.value, keyword: query.trim(), page: 1, pageSize: 50 })
+      searchResults.value = res.data?.list || []
+    } catch (err) {
+      console.error('searchStocks error:', err)
+      searchResults.value = []
+    }
+    searchLoading.value = false
+  }, 300)
 }
 
 /**
  * handleMarketChange
- * Description: Resets the selected stock and quote, then re-fetches the stock list
- *   when the market tab selection changes.
+ * Description: Resets the selected stock, quote, and search state when market tab changes.
  * @returns {void}
  */
 const handleMarketChange = () => {
   selectedStock.value = null
   stockQuote.value = null
-  fetchStocks()
+  selectedSearchStock.value = null
+  searchResults.value = []
 }
 
 /**
- * handleSearch
- * Description: Resets pagination to page 1 and re-fetches stocks when the search keyword changes.
- * @returns {void}
- */
-const handleSearch = () => {
-  page.value = 1
-  fetchStocks()
-}
-
-/**
- * handleRowClick
- * Description: Handles stock row selection: fetches quote data, initializes the chart,
- *   then loads the stock history for the selected stock.
- * @param {Object} row - The clicked stock row object
+ * onStockSelected
+ * Description: Handles stock selection from search dropdown: fetches quote data,
+ *   initializes the chart, then loads the stock history.
+ * @param {Object} stock - The selected stock object
  * @returns {Promise<void>}
  */
-const handleRowClick = async (row) => {
-  console.log('handleRowClick:', row.stock_code)
-  selectedStock.value = row
+const onStockSelected = async (stock) => {
+  if (!stock) {
+    selectedStock.value = null
+    stockQuote.value = null
+    return
+  }
+  console.log('onStockSelected:', stock.stock_code)
+  selectedStock.value = stock
   try {
-    const res = await getStockQuote(row.stock_code, row.market_type)
+    const res = await getStockQuote(stock.stock_code, stock.market_type)
     stockQuote.value = res.data
     console.log('quote:', stockQuote.value)
   } catch (err) {
@@ -679,7 +688,7 @@ onUnmounted(() => {
 <style scoped>
 .trade-container {
   padding: 20px;
-  background-color: #f5f5f5;
+  background-color: var(--color-bg);
   min-height: 100vh;
 }
 
@@ -688,8 +697,8 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: white;
-  border-radius: 8px;
+  background: var(--color-card);
+  border-radius: var(--radius-card);
   margin-bottom: 20px;
 }
 
@@ -701,78 +710,90 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .stock-info {
   padding: 10px 0;
 }
 
+.stock-info :deep(.el-descriptions__title) {
+  font-family: var(--font-display);
+}
+
 .info-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid #eee;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .info-row .label {
-  color: #999;
+  color: var(--color-text-secondary);
+  font-size: 14px;
 }
 
 .info-row .value {
-  font-weight: bold;
+  font-weight: 600;
+  font-family: var(--font-num);
 }
 
 .info-row .price {
-  font-size: 24px;
-  color: #f56c6c;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--color-up);
 }
 
 .amount {
   font-size: 18px;
-  font-weight: bold;
-  color: #409eff;
+  font-weight: 700;
+  color: var(--color-primary);
+  font-family: var(--font-num);
 }
 
 .amount-cny {
-  font-size: 14px;
-  color: #999;
+  font-size: 13px;
+  color: var(--color-text-secondary);
   margin-left: 10px;
 }
 
 .commission {
   color: #e6a23c;
-  font-weight: bold;
+  font-weight: 600;
 }
 
 .commission-rate {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-secondary);
   margin-left: 8px;
 }
 
 .total-deduct {
   font-size: 20px;
-  font-weight: bold;
-  color: #f56c6c;
+  font-weight: 700;
+  color: var(--color-up);
+  font-family: var(--font-num);
 }
 
 .total-deduct.sell {
-  color: #67c23a;
+  color: var(--color-down);
 }
 
 .no-selection {
   text-align: center;
   padding: 60px 0;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 
 .chart-container {
   width: 100%;
   height: 400px;
-  min-height: 400px;
+  min-height: 300px;
   margin-bottom: 15px;
-  background-color: #fff;
-  border: 1px dashed #999;
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
 }
 
 #kline-inner {
@@ -788,5 +809,26 @@ onUnmounted(() => {
 
 .chart-debug p {
   margin: 4px 0;
+}
+
+@media (max-width: 768px) {
+  .trade-container {
+    padding: 12px;
+  }
+  .header {
+    padding: 14px 16px;
+  }
+  .chart-container {
+    height: 300px;
+    min-height: 250px;
+  }
+  .stock-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 16px;
+  }
+  .info-row .price {
+    font-size: 22px;
+  }
 }
 </style>

@@ -6,8 +6,8 @@
     </div>
 
     <el-card>
-      <el-row :gutter="20">
-        <el-col :span="6">
+      <el-row :gutter="[16, 16]">
+        <el-col :xs="12" :sm="12" :md="6">
           <div class="stat-card">
             <div class="stat-title">{{ $t('statistics_page.floating_profit') }}</div>
             <div class="stat-value" :class="stats.floatingProfit >= 0 ? 'profit' : 'loss'">
@@ -15,7 +15,7 @@
             </div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :xs="12" :sm="12" :md="6">
           <div class="stat-card">
             <div class="stat-title">{{ $t('statistics_page.floating_profit_rate') }}</div>
             <div class="stat-value" :class="stats.floatingProfitRate >= 0 ? 'profit' : 'loss'">
@@ -23,7 +23,7 @@
             </div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :xs="12" :sm="12" :md="6">
           <div class="stat-card">
             <div class="stat-title">{{ $t('statistics_page.realized_profit') }}</div>
             <div class="stat-value" :class="stats.realizedProfit >= 0 ? 'profit' : 'loss'">
@@ -31,7 +31,7 @@
             </div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :xs="12" :sm="12" :md="6">
           <div class="stat-card">
             <div class="stat-title">{{ $t('statistics_page.position_count') }}</div>
             <div class="stat-value">{{ stats.positionCount || 0 }}</div>
@@ -43,26 +43,26 @@
 
       <div class="trade-stats">
         <h3>{{ $t('statistics_page.trade_stats') }}</h3>
-        <el-row :gutter="20">
-          <el-col :span="6">
+        <el-row :gutter="[16, 12]">
+          <el-col :xs="12" :sm="12" :md="6">
             <div class="stat-item">
               <span class="label">{{ $t('statistics_page.total_trades') + '：' }}</span>
               <span class="value">{{ tradeStats.totalTrades || 0 }}</span>
             </div>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="12" :sm="12" :md="6">
             <div class="stat-item">
               <span class="label">{{ $t('statistics_page.buy_count') + '：' }}</span>
               <span class="value">{{ tradeStats.buyTrades || 0 }}</span>
             </div>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="12" :sm="12" :md="6">
             <div class="stat-item">
               <span class="label">{{ $t('statistics_page.sell_count') + '：' }}</span>
               <span class="value">{{ tradeStats.sellTrades || 0 }}</span>
             </div>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="12" :sm="12" :md="6">
             <div class="stat-item">
               <span class="label">{{ $t('statistics_page.total_amount') + '：' }}</span>
               <span class="value">{{ formatMoney(tradeStats.totalAmount) }}</span>
@@ -169,7 +169,7 @@ const fetchStats = async () => {
 <style scoped>
 .statistics-container {
   padding: 20px;
-  background-color: #f5f5f5;
+  background-color: var(--color-bg);
   min-height: 100vh;
 }
 
@@ -178,8 +178,8 @@ const fetchStats = async () => {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: white;
-  border-radius: 8px;
+  background: var(--color-card);
+  border-radius: var(--radius-card);
   margin-bottom: 20px;
 }
 
@@ -187,32 +187,39 @@ const fetchStats = async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .stat-card {
-  background: #f5f7fa;
-  padding: 20px;
-  border-radius: 8px;
+  background: var(--color-bg);
+  padding: 20px 16px;
+  border-radius: var(--radius-card);
   text-align: center;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .stat-title {
-  font-size: 14px;
-  color: #999;
-  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 8px;
 }
 
 .stat-value {
-  font-size: 24px;
-  font-weight: bold;
+  font-size: 22px;
+  font-weight: 700;
+  font-family: var(--font-num);
 }
 
 .stat-value.profit {
-  color: #f56c6c;
+  color: var(--color-up);
 }
 
 .stat-value.loss {
-  color: #67c23a;
+  color: var(--color-down);
 }
 
 .trade-stats {
@@ -220,22 +227,38 @@ const fetchStats = async () => {
 }
 
 .trade-stats h3 {
-  margin-bottom: 15px;
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .stat-item {
-  padding: 10px;
+  padding: 8px;
 }
 
 .stat-item .label {
-  color: #999;
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
 .stat-item .value {
-  font-weight: bold;
+  font-weight: 600;
+  font-family: var(--font-num);
 }
 
 .commission-text {
   color: #909399;
+}
+
+@media (max-width: 768px) {
+  .statistics-container {
+    padding: 12px;
+  }
+  .header {
+    padding: 14px 16px;
+  }
+  .stat-value {
+    font-size: 18px;
+  }
 }
 </style>

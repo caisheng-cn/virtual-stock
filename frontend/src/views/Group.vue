@@ -9,7 +9,7 @@
       <template #header>
         <div class="card-header">
           <span>{{ $t('group_page.member_ranking') }}</span>
-          <el-select v-model="currentGroup" :placeholder="$t('group_page.select_group')" @change="onGroupChange" style="width:200px">
+          <el-select v-model="currentGroup" :placeholder="$t('group_page.select_group')" @change="onGroupChange" class="group-select">
             <el-option v-for="g in groups" :key="g.groupId" :label="g.groupName" :value="g.groupId" />
           </el-select>
         </div>
@@ -46,7 +46,7 @@
       <template #header>
         <div class="card-header">
           <span>{{ $t('group_page.member_trades') }}</span>
-          <div style="display:flex;gap:10px;align-items:center">
+          <div class="filter-row">
             <el-date-picker
               v-model="tradeDateRange"
               type="daterange"
@@ -55,13 +55,11 @@
               :end-placeholder="$t('group_page.end_date')"
               value-format="YYYY-MM-DD"
               @change="fetchMemberDetail"
-              style="width: 260px"
             />
             <el-select
               v-model="selectedMember"
               :placeholder="$t('group_page.select_member')"
               @change="fetchMemberDetail"
-              style="width:200px"
               clearable
             >
               <el-option v-for="m in ranking" :key="m.userId" :label="m.nickname || '用户' + m.userId" :value="m.userId" />
@@ -79,20 +77,20 @@
       </div>
 
       <div v-else-if="memberDetail">
-        <el-row :gutter="20" style="margin-bottom:20px">
-          <el-col :span="6">
+        <el-row :gutter="[16, 16]" style="margin-bottom:20px">
+          <el-col :xs="12" :sm="12" :md="6">
             <div class="summary-card">
               <div class="summary-label">{{ $t('group_page.available_cash') }}</div>
               <div class="summary-value">{{ formatMoney(memberDetail.balance.cash) }} RMB</div>
             </div>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="12" :sm="12" :md="6">
             <div class="summary-card">
               <div class="summary-label">{{ $t('group_page.total_assets') }}</div>
               <div class="summary-value">{{ formatMoney(memberDetail.balance.totalAssets) }} RMB</div>
             </div>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="12" :sm="12" :md="6">
             <div class="summary-card">
               <div class="summary-label">{{ $t('group_page.profit') }}</div>
               <div class="summary-value" :class="memberDetail.balance.profit >= 0 ? 'profit' : 'loss'">
@@ -100,7 +98,7 @@
               </div>
             </div>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="12" :sm="12" :md="6">
             <div class="summary-card">
               <div class="summary-label">{{ $t('group_page.profit_rate') }}</div>
               <div class="summary-value" :class="memberDetail.balance.profitRate >= 0 ? 'profit' : 'loss'">
@@ -178,7 +176,6 @@
             :end-placeholder="$t('group_page.end_date')"
             value-format="YYYY-MM-DD"
             @change="fetchMessages(1)"
-            style="width: 300px"
           />
         </div>
       </template>
@@ -205,7 +202,7 @@
             </el-tag>
             <span class="message-time">{{ formatTime(msg.created_at) }}</span>
           </div>
-          <div class="message-content">{{ msg.content }}</div>
+          <div v-if="!msg.stock_code" class="message-content">{{ msg.content }}</div>
 
           <div v-if="msg.stock_code" class="message-stock-info">
             <span>{{ getMessageTypeLabel(msg.message_type) }} {{ msg.stock_code }} {{ msg.stock_name }}</span>
@@ -224,12 +221,9 @@
             >
               {{ msg.liked ? '❤️' : '🤍' }} {{ msg.likeCount || 0 }}
             </el-button>
-            <el-button
-              text
-              size="small"
-              @click="toggleReplies(msg)"
-            >
-              💬 {{ msg.replies?.length || 0 }}
+            <span class="reply-count">💬 {{ msg.replies?.length || 0 }}</span>
+            <el-button text size="small" type="primary" @click="focusReplyInput(msg)">
+              {{ $t('group_page.reply') }}
             </el-button>
           </div>
 
@@ -240,7 +234,7 @@
             </span>
           </div>
 
-          <div v-if="msg.showReplies" class="replies-section">
+          <div class="replies-section">
             <div v-if="msg.replies && msg.replies.length > 0">
               <div v-for="reply in msg.replies" :key="reply.id" class="reply-item">
                 <span class="reply-user">{{ reply.nickname }}</span>
@@ -254,6 +248,7 @@
                 :placeholder="$t('group_page.reply_placeholder')"
                 size="small"
                 style="flex:1"
+                :ref="(el) => { if (el) replyInputRefs[msg.id] = el }"
                 @keyup.enter="handleReply(msg)"
               />
               <el-button size="small" type="primary" @click="handleReply(msg)">{{ $t('common.send') }}</el-button>
@@ -287,7 +282,7 @@
  * Version History:
  *   - 2024-01-01: Initial version
  */
-import { ref, onMounted } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
@@ -311,6 +306,7 @@ const messagePage = ref(1)
 const messagesLoading = ref(false)
 const messageDateRange = ref(null)
 const replyText = ref({})
+const replyInputRefs = {}
 
 const tradeDateRange = ref(null)
 
@@ -452,7 +448,7 @@ const fetchMessages = async (page) => {
       params.end_date = messageDateRange.value[1]
     }
     const res = await getGroupMessages(currentGroup.value, params)
-    const list = (res.data?.list || []).map(m => ({ ...m, showReplies: false }))
+    const list = (res.data?.list || [])
     messages.value = list
     messageTotal.value = res.data?.total || 0
   } catch (err) {
@@ -478,16 +474,16 @@ const handleLike = async (msg) => {
 }
 
 /**
- * toggleReplies
- * Description: Toggles the visibility of reply section for a group message.
- * @param {Object} msg - The message object to toggle replies for
+ * focusReplyInput
+ * Description: Focuses the reply input for a specific message.
+ * @param {Object} msg - The message object to reply to
  * @returns {void}
  */
-const toggleReplies = (msg) => {
-  msg.showReplies = !msg.showReplies
-  if (msg.showReplies && !replyText.value[msg.id]) {
-    replyText.value[msg.id] = ''
-  }
+const focusReplyInput = (msg) => {
+  nextTick(() => {
+    if (!replyText.value[msg.id]) replyText.value[msg.id] = ''
+    replyInputRefs[msg.id]?.focus()
+  })
 }
 
 /**
@@ -520,7 +516,7 @@ const handleReply = async (msg) => {
 <style scoped>
 .group-container {
   padding: 20px;
-  background-color: #f5f5f5;
+  background-color: var(--color-bg);
   min-height: 100vh;
 }
 
@@ -529,8 +525,8 @@ const handleReply = async (msg) => {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: white;
-  border-radius: 8px;
+  background: var(--color-card);
+  border-radius: var(--radius-card);
   margin-bottom: 20px;
 }
 
@@ -538,43 +534,54 @@ const handleReply = async (msg) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.profit { color: #f56c6c; }
-.loss { color: #67c23a; }
+.filter-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.profit { color: var(--color-up); font-weight: 600; }
+.loss { color: var(--color-down); font-weight: 600; }
 
 .summary-card {
-  background: #fafafa;
-  border: 1px solid #eee;
-  border-radius: 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
   padding: 14px 16px;
   text-align: center;
 }
 
 .summary-label {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
 }
 
 .summary-value {
   font-size: 18px;
-  font-weight: bold;
-  color: #333;
+  font-weight: 700;
+  color: var(--color-text);
+  font-family: var(--font-num);
 }
 
 .message-card {
-  background: #fafafa;
-  border: 1px solid #eee;
-  border-radius: 8px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
   padding: 14px 16px;
   margin-bottom: 12px;
   border-left: 4px solid #dcdfe6;
+  transition: box-shadow 0.2s;
 }
 
 .message-card.own-message {
   background: #ecf5ff;
-  border-left-color: #409eff;
+  border-left-color: var(--color-primary);
 }
 
 .message-header {
@@ -582,17 +589,18 @@ const handleReply = async (msg) => {
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 .message-user {
-  font-weight: bold;
+  font-weight: 600;
   font-size: 14px;
-  color: #333;
+  color: var(--color-text);
 }
 
 .message-time {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-secondary);
   margin-left: auto;
 }
 
@@ -606,9 +614,9 @@ const handleReply = async (msg) => {
 .message-stock-info {
   font-size: 12px;
   color: #666;
-  background: #f0f0f0;
+  background: var(--color-bg);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-btn);
   margin-bottom: 8px;
   display: inline-block;
 }
@@ -617,23 +625,29 @@ const handleReply = async (msg) => {
   display: flex;
   gap: 8px;
   margin-bottom: 4px;
+  align-items: center;
+}
+
+.reply-count {
+  font-size: 13px;
+  color: var(--color-text-secondary);
 }
 
 .likers {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
 }
 
 .liker-name {
-  color: #409eff;
+  color: var(--color-primary);
   margin-right: 2px;
 }
 
 .replies-section {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--color-border);
 }
 
 .reply-item {
@@ -645,8 +659,8 @@ const handleReply = async (msg) => {
 }
 
 .reply-user {
-  font-weight: bold;
-  color: #333;
+  font-weight: 600;
+  color: var(--color-text);
   white-space: nowrap;
 }
 
@@ -657,7 +671,7 @@ const handleReply = async (msg) => {
 
 .reply-time {
   font-size: 11px;
-  color: #999;
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
@@ -671,5 +685,31 @@ const handleReply = async (msg) => {
   display: flex;
   justify-content: center;
   margin-top: 16px;
+}
+
+.group-select {
+  min-width: 140px;
+}
+
+@media (max-width: 768px) {
+  .group-container {
+    padding: 12px;
+  }
+  .header {
+    padding: 14px 16px;
+  }
+  .summary-value {
+    font-size: 16px;
+  }
+  .message-card {
+    padding: 12px;
+  }
+  .filter-row {
+    flex-direction: column;
+    width: 100%;
+  }
+  .filter-row > * {
+    width: 100%;
+  }
 }
 </style>

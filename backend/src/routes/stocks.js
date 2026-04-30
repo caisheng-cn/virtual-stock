@@ -26,7 +26,14 @@ router.get('/', auth, async (req, res) => {
     const { market_type, page = 1, pageSize = 20, keyword } = req.query
     const where = { status: 1 }
     if (market_type) where.market_type = market_type
-    if (keyword) where.stock_name = { [sequelize.Sequelize.Op.like]: `%${keyword}%` }
+    if (keyword) {
+      const { Op } = sequelize.Sequelize
+      where[Op.or] = [
+        { stock_name: { [Op.like]: `%${keyword}%` } },
+        { stock_code: { [Op.like]: `%${keyword}%` } },
+        { pinyin_abbr: { [Op.like]: `%${keyword}%` } }
+      ]
+    }
 
     const { count, rows } = await StockPool.findAndCountAll({
       where,

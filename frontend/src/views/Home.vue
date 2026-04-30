@@ -14,29 +14,26 @@
     </div>
 
     <div class="content">
-      <el-row :gutter="20">
-        <el-col :span="8">
+      <el-row :gutter="[16, 16]">
+        <el-col :xs="24" :sm="12" :md="8">
           <div class="card">
             <div class="card-title">{{ $t('nav.available_funds') }}</div>
             <div class="card-value">{{ formatMoney(balance?.cash) || '0.00' }} RMB</div>
           </div>
         </el-col>
-        <el-col :span="8">
+        <el-col :xs="24" :sm="12" :md="8">
           <div class="card">
             <div class="card-title">{{ $t('nav.total_assets') }}</div>
             <div class="card-value">{{ formatMoney(balance?.totalAssets) || '0.00' }} RMB</div>
           </div>
         </el-col>
-        <el-col :span="8">
+        <el-col :xs="24" :sm="12" :md="8">
           <div class="card">
             <div class="card-title">{{ $t('nav.market_value') }}</div>
             <div class="card-value">{{ formatMoney(balance?.totalMarketValue) || '0.00' }} RMB</div>
           </div>
         </el-col>
-      </el-row>
-
-      <el-row :gutter="20" style="margin-top: 20px;">
-        <el-col :span="8">
+        <el-col :xs="24" :sm="12" :md="8">
           <div class="card">
             <div class="card-title">{{ $t('nav.profit_amount') }}</div>
             <div class="card-value" :class="balance?.profit >= 0 ? 'profit' : 'loss'">
@@ -46,41 +43,38 @@
         </el-col>
       </el-row>
 
-      <el-row :gutter="20" style="margin-top: 30px;">
-        <el-col :span="8">
+      <el-row :gutter="[16, 16]" style="margin-top: 24px;">
+        <el-col :xs="12" :sm="8" :md="8">
           <div class="nav-card" @click="$router.push('/trade')">
             <div class="nav-icon">📈</div>
             <div class="nav-text">{{ $t('nav.trade') }}</div>
           </div>
         </el-col>
-        <el-col :span="8">
+        <el-col :xs="12" :sm="8" :md="8">
           <div class="nav-card" @click="$router.push('/positions')">
             <div class="nav-icon">📊</div>
             <div class="nav-text">{{ $t('nav.positions') }}</div>
           </div>
         </el-col>
-        <el-col :span="8">
+        <el-col :xs="12" :sm="8" :md="8">
           <div class="nav-card" @click="$router.push('/statistics')">
             <div class="nav-icon">📋</div>
             <div class="nav-text">{{ $t('nav.statistics') }}</div>
           </div>
         </el-col>
-      </el-row>
-
-      <el-row :gutter="20" style="margin-top: 20px;">
-        <el-col :span="8">
+        <el-col :xs="12" :sm="8" :md="8">
           <div class="nav-card" @click="$router.push('/transactions')">
             <div class="nav-icon">📝</div>
             <div class="nav-text">{{ $t('nav.transactions') }}</div>
           </div>
         </el-col>
-        <el-col :span="8">
+        <el-col :xs="12" :sm="8" :md="8">
           <div class="nav-card" @click="$router.push('/fund-flow')">
             <div class="nav-icon">💰</div>
             <div class="nav-text">{{ $t('nav.fund_flow') }}</div>
           </div>
         </el-col>
-        <el-col :span="8">
+        <el-col :xs="12" :sm="8" :md="8">
           <div class="nav-card" style="position:relative" @click="$router.push('/group')">
             <div class="nav-icon">👥</div>
             <div class="nav-text">{{ $t('nav.group_ranking') }}</div>
@@ -177,7 +171,7 @@ const handleLogout = () => {
 <style scoped>
 .home-container {
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background-color: var(--color-bg);
 }
 
 .header {
@@ -185,8 +179,8 @@ const handleLogout = () => {
   justify-content: space-between;
   align-items: center;
   padding: 20px 40px;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--color-card);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 
 .user-info {
@@ -197,57 +191,69 @@ const handleLogout = () => {
 
 .content {
   padding: 20px 40px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .card {
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--color-card);
+  padding: 20px 24px;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .card-title {
-  font-size: 14px;
-  color: #999;
-  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 8px;
 }
 
 .card-value {
   font-size: 24px;
-  font-weight: bold;
-  color: #333;
+  font-weight: 700;
+  color: var(--color-text);
+  font-family: var(--font-num);
 }
 
 .card-value.profit {
-  color: #f56c6c;
+  color: var(--color-up);
 }
 
 .card-value.loss {
-  color: #67c23a;
+  color: var(--color-down);
 }
 
 .nav-card {
-  background: white;
-  padding: 30px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--color-card);
+  padding: 24px 16px;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   text-align: center;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .nav-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .nav-icon {
-  font-size: 40px;
-  margin-bottom: 10px;
+  font-size: 36px;
+  margin-bottom: 8px;
+  display: block;
 }
 
 .nav-text {
-  font-size: 16px;
-  color: #333;
+  font-size: 15px;
+  color: var(--color-text);
+  font-weight: 500;
 }
 
 .footer {
@@ -257,13 +263,13 @@ const handleLogout = () => {
 }
 
 .footer a {
-  color: #999;
+  color: var(--color-text-secondary);
   text-decoration: none;
+  font-size: 14px;
 }
 
 .footer a:hover {
-  color: #667eea;
-  text-decoration: underline;
+  color: var(--color-primary);
 }
 
 .unread-badge {
@@ -278,5 +284,33 @@ const handleLogout = () => {
   height: 18px;
   line-height: 18px;
   border: 2px solid white;
+}
+
+@media (max-width: 768px) {
+  .header {
+    padding: 14px 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .user-info {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  .user-info span {
+    font-size: 13px;
+  }
+  .content {
+    padding: 16px;
+  }
+  .card-value {
+    font-size: 20px;
+  }
+  .nav-card {
+    padding: 20px 12px;
+  }
+  .nav-icon {
+    font-size: 28px;
+  }
 }
 </style>
