@@ -1,0 +1,1 @@
+import{r as e}from"./request-CVf62gDQ.js";const g=(s,t)=>e.get(`/messages/${s}`,{params:t}),o=s=>e.post(`/messages/${s}/like`),r=(s,t)=>e.post(`/messages/${s}/reply`,t),n=()=>e.get("/messages/unread/count");export{g as a,n as g,r,o as t};

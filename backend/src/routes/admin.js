@@ -696,19 +696,26 @@ router.delete('/users/:id', async (req, res) => {
 /**
  * GET /api/v1/admin/stocks
  * List all stocks in the pool with optional market type filter.
- * Query: { page?, pageSize?, market_type? }
+ * Query: { page?, pageSize?, market_type?, keyword? }
  * Response: { code, data: { list: StockPool[], total } }
  */
 router.get('/stocks', async (req, res) => {
   try {
-    const { page = 1, pageSize = 20, market_type } = req.query
+    const { page = 1, pageSize = 20, market_type, keyword } = req.query
     const where = {}
     if (market_type) where.market_type = market_type
+    if (keyword) {
+      where[sequelize.Sequelize.Op.or] = [
+        { stock_name: { [sequelize.Sequelize.Op.like]: `%${keyword}%` } },
+        { stock_code: { [sequelize.Sequelize.Op.like]: `%${keyword}%` } }
+      ]
+    }
 
     const { count, rows } = await StockPool.findAndCountAll({
       where,
       limit: parseInt(pageSize),
-      offset: (page - 1) * pageSize
+      offset: (page - 1) * parseInt(pageSize),
+      order: [['id', 'ASC']]
     })
     res.json({ code: 0, data: { list: rows, total: count } })
   } catch (err) {

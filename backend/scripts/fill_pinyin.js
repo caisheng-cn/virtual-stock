@@ -9,7 +9,7 @@ const sequelize = new Sequelize(config.database, config.username, config.passwor
 })
 
 async function run() {
-  const [rows] = await sequelize.query('SELECT id, stock_name FROM stock_pools')
+  const [rows] = await sequelize.query("SELECT id, stock_name FROM stock_pools WHERE market_type = 1")
   console.log(`Found ${rows.length} stocks to update`)
 
   for (const row of rows) {

@@ -1,0 +1,1 @@
+import{r as s}from"./request-CVf62gDQ.js";const r=()=>s.get("/groups/my"),o=e=>s.get("/balance",{params:{group_id:e}}),n=e=>s.get(`/groups/${e}/ranking`),p=(e,t,a)=>s.get(`/groups/${e}/members/${t}/details`,{params:a});export{o as a,n as b,p as c,r as g};

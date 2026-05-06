@@ -1,5 +1,5 @@
 const { sequelize, StockPool, StockPrice, StockPricesCache, StockSyncRecord } = require('../models')
-const { getHistory, runPythonBatch } = require('./stock')
+const { getHistory, runPythonBatchHKAKShare, runPythonBatchUSAKShare } = require('./stock')
 
 const cancelFlags = new Map()
 
@@ -136,6 +136,7 @@ async function startSync(marketType, recordId) {
       const BATCH_SIZE = 5
       const CONCURRENCY = 3
       let abortReason = null
+      const isHK = marketType === 2
       const batches = []
       for (let i = 0; i < toSync.length; i += BATCH_SIZE) {
         batches.push(toSync.slice(i, i + BATCH_SIZE))
@@ -146,12 +147,14 @@ async function startSync(marketType, recordId) {
           if (await isCancelled(recordId)) { abortReason = 'cancelled'; break }
           const batch = queueB.shift()
           try {
-            const batchStocks = batch.map(s => ({
-              symbol: s.stock_code,
-              market_type: marketType,
-              stock_name: s.stock_name
-            }))
-            const results = await runPythonBatch(batchStocks)
+            let results
+            if (isHK) {
+              const batchStocks = batch.map(s => ({ symbol: s.stock_code, start_date: s.startDate, end_date: today }))
+              results = await runPythonBatchHKAKShare(batchStocks)
+            } else {
+              const batchStocks = batch.map(s => ({ symbol: s.stock_code, start_date: s.startDate, end_date: today }))
+              results = await runPythonBatchUSAKShare(batchStocks)
+            }
             for (const r of results) {
               const stock = batch.find(s => s.stock_code === r.symbol)
               if (!stock) { fail++; continue }

@@ -52,12 +52,18 @@ router.get('/profit', auth, async (req, res) => {
     const floatingProfit = totalMarketValue - totalPositionCost
     const floatingProfitRate = totalPositionCost > 0 ? (floatingProfit / totalPositionCost) * 100 : 0
 
-    const realizedProfitResult = await Transaction.findAll({
+    const sellProfits = await Transaction.findAll({
       where: { user_id: req.userId, trade_type: 2, profit: { [Op.ne]: null } }
     })
+    const dividends = await Transaction.findAll({
+      where: { user_id: req.userId, trade_type: 3 }
+    })
     let realizedProfit = 0
-    for (const t of realizedProfitResult) {
+    for (const t of sellProfits) {
       realizedProfit += parseFloat(t.profit) || 0
+    }
+    for (const t of dividends) {
+      realizedProfit += parseFloat(t.amount) || 0
     }
 
     res.json({

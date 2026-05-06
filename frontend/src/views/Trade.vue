@@ -103,11 +103,14 @@
               </el-radio-group>
             </el-form-item>
             <el-form-item :label="$t('trade_page.shares')">
-              <el-input-number v-model="tradeForm.shares" :min="1" />
+              <el-input-number v-model="tradeForm.shares" :min="1" :max="Math.max(1, tradeForm.type === 1 ? maxBuyShares : maxSellShares)" />
+              <span v-if="tradeForm.type === 1 && maxBuyShares > 0" class="max-hint">{{ $t('trade_page.max_buy') }}: {{ maxBuyShares }}</span>
+              <span v-else-if="tradeForm.type === 2 && maxSellShares > 0" class="max-hint">{{ $t('trade_page.max_sell') }}: {{ maxSellShares }}</span>
             </el-form-item>
             <el-form-item :label="$t('trade_page.estimated_amount')">
               <span class="amount">{{ formatMoney(amountOriginal) }} {{ currencySymbol }}</span>
               <span class="amount-cny">({{ formatMoney(amountCNY) }} RMB)</span>
+              <span v-if="tradeForm.type === 1" class="balance-hint">{{ $t('trade_page.available_balance') }}: {{ formatMoney(userCash) }} RMB</span>
             </el-form-item>
             <el-form-item :label="$t('trade_page.estimated_commission')">
               <span class="commission">{{ formatMoney(estimatedCommission) }} {{ currencySymbol }}</span>
@@ -151,7 +154,8 @@ import { createChart } from 'lightweight-charts'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { getStockList, getStockQuote, getStockHistory, getCommissionConfigs } from '@/api/stock'
-import { buyStock, sellStock } from '@/api/trade'
+import { buyStock, sellStock, getPositions } from '@/api/trade'
+import { getBalance } from '@/api/group'
 
 const { t } = useI18n()
 
@@ -175,6 +179,8 @@ const searchLoading = ref(false)
 const selectedSearchStock = ref(null)
 let searchTimer = null
 const loading = ref(false)
+const userCash = ref(0)
+const positionShares = ref(0)
 const chartContainer = ref(null)
 const klineType = ref('day')
 const klineLoading = ref(false)
@@ -251,6 +257,16 @@ const estimatedTotal = computed(() => {
     return amountCNY.value - estimatedCommissionCNY.value
   }
 })
+
+const maxBuyShares = computed(() => {
+  if (!stockQuote.value?.price) return 0
+  const rate = EXCHANGE_RATES[marketType.value] || 1
+  const priceInRMB = stockQuote.value.price * rate
+  if (priceInRMB <= 0) return 0
+  return Math.floor(userCash.value / priceInRMB)
+})
+
+const maxSellShares = computed(() => positionShares.value)
 
 const commissionRateDisplay = computed(() => {
   const rate = getRate(marketType.value, tradeForm.type)
@@ -598,13 +614,21 @@ const onStockSelected = async (stock) => {
   }
   console.log('onStockSelected:', stock.stock_code)
   selectedStock.value = stock
-  try {
-    const res = await getStockQuote(stock.stock_code, stock.market_type)
-    stockQuote.value = res.data
-    console.log('quote:', stockQuote.value)
-  } catch (err) {
-    ElMessage.error(err.message || t('trade_page.trade_failed'))
-  }
+
+  // Fetch quote, balance, and positions in parallel
+  const [quoteRes, balanceRes, posRes] = await Promise.all([
+    getStockQuote(stock.stock_code, stock.market_type).catch(() => ({ data: null })),
+    getBalance().catch(() => ({ data: null })),
+    getPositions().catch(() => [])
+  ])
+
+  stockQuote.value = quoteRes?.data || stockQuote.value
+  userCash.value = balanceRes?.data?.cash || 0
+
+  const pos = (Array.isArray(posRes) ? posRes : posRes?.data || []).find(
+    p => p.stockCode === stock.stock_code && p.marketType === stock.market_type
+  )
+  positionShares.value = pos?.shares || 0
 
   initChart()
 
@@ -756,6 +780,19 @@ onUnmounted(() => {
   font-size: 13px;
   color: var(--color-text-secondary);
   margin-left: 10px;
+}
+
+.max-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-left: 10px;
+  white-space: nowrap;
+}
+
+.balance-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-left: 12px;
 }
 
 .commission {

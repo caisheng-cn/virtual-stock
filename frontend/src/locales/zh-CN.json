@@ -112,6 +112,9 @@
     "trade_failed": "交易失败",
     "select_stock_first": "请选择股票",
     "enter_shares": "请输入交易数量",
+    "max_buy": "最大可买",
+    "max_sell": "最大可卖",
+    "available_balance": "可用余额",
     "no_stock_selected": "请选择一只股票",
     "confirm_msg_buy": "股票: {stockName}\n数量: {shares}股\n单价: {price} {currency}\n金额: {amount} {currency} (约{amountCny} RMB)\n佣金: {commission} {currency} (约{commissionCny} RMB)\n合计扣款: {total} RMB",
     "confirm_msg_sell": "股票: {stockName}\n数量: {shares}股\n单价: {price} {currency}\n金额: {amount} {currency} (约{amountCny} RMB)\n佣金: {commission} {currency} (约{commissionCny} RMB)\n到账金额: {total} RMB"

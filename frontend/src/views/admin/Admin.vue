@@ -245,6 +245,7 @@
               <div class="card-header">
                 <span>{{ $t('admin.stock_pool') }}</span>
                 <div>
+                  <el-input v-model="stockKeyword" :placeholder="$t('trade_page.search_stock')" style="width: 180px; margin-right: 10px;" clearable @input="onStockKeywordInput" @clear="loadStocks" />
                   <el-select v-model="stockFilter" :placeholder="$t('admin.all_markets')" style="width: 120px; margin-right: 10px;" @change="loadStocks">
                     <el-option :label="$t('admin.all_markets')" :value="0" />
                     <el-option :label="$t('market.a_share')" :value="1" />
@@ -1040,6 +1041,7 @@ const statsPeriod = ref('week')
 const stockFilter = ref(0)
 const stockPage = ref(1)
 const stockTotal = ref(0)
+const stockKeyword = ref('')
 
 const userFundFlowList = ref([])
 const fundFlowDateRange = ref([])
@@ -1141,9 +1143,15 @@ const fetchData = async () => {
 const loadStocks = async () => {
   const params = { page: stockPage.value, pageSize: 20 }
   if (stockFilter.value) params.market_type = stockFilter.value
+  if (stockKeyword.value) params.keyword = stockKeyword.value
   const res = await getStocks(params)
   stockList.value = res.data?.list || []
   stockTotal.value = res.data?.total || 0
+}
+
+const onStockKeywordInput = () => {
+  stockPage.value = 1
+  loadStocks()
 }
 
 /**
@@ -1808,7 +1816,8 @@ const createStock = async () => {
     await createStockAPI(stockForm)
     ElMessage.success(t('admin.create_success'))
     showStockDialog.value = false
-    stockList.value = await getStocks().then(r => r.data?.list || [])
+    stockPage.value = 1
+    loadStocks()
   } catch (err) {
     ElMessage.error(err.message || t('admin.operate_failed'))
   }

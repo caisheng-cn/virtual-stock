@@ -112,6 +112,9 @@
     "trade_failed": "Trade failed",
     "select_stock_first": "Please select a stock",
     "enter_shares": "Please enter shares",
+    "max_buy": "Max Buy",
+    "max_sell": "Max Sell",
+    "available_balance": "Available",
     "no_stock_selected": "Please select a stock",
     "confirm_msg_buy": "Stock: {stockName}\nShares: {shares}\nPrice: {price} {currency}\nAmount: {amount} {currency}\nCommission: {commission} {currency}\nTotal Deduction: {total} RMB",
     "confirm_msg_sell": "Stock: {stockName}\nShares: {shares}\nPrice: {price} {currency}\nAmount: {amount} {currency}\nCommission: {commission} {currency}\nNet Proceeds: {total} RMB"

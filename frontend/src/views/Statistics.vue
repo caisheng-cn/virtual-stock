@@ -77,11 +77,15 @@
         <span>{{ $t('statistics_page.trade_records') }}</span>
       </template>
       <el-table :data="transactions">
-        <el-table-column prop="trade_date" :label="$t('statistics_page.date')" width="100" />
+        <el-table-column :label="$t('statistics_page.date')" width="100">
+          <template #default="{ row }">{{ row.tradeDate || '-' }}</template>
+        </el-table-column>
         <el-table-column prop="stockCode" :label="$t('statistics_page.stock_code')" width="100" />
         <el-table-column prop="stockName" :label="$t('statistics_page.stock_name')" />
-        <el-table-column prop="tradeType" :label="$t('statistics_page.type')" width="80">
-          <template #default="{ row }">{{ row.tradeType === 1 ? $t('statistics_page.buy_label') : $t('statistics_page.sell_label') }}</template>
+        <el-table-column :label="$t('statistics_page.type')" width="80">
+          <template #default="{ row }">
+            <el-tag :type="getTradeTagType(row.tradeType)" size="small">{{ getTradeTypeLabel(row.tradeType) }}</el-tag>
+          </template>
         </el-table-column>
         <el-table-column prop="shares" :label="$t('statistics_page.shares')" width="80" />
         <el-table-column prop="price" :label="$t('statistics_page.price')" width="100">
@@ -97,6 +101,9 @@
             </span>
             <span v-else-if="row.tradeType === 1" class="commission-text">
               -{{ formatMoney(row.commission) }}
+            </span>
+            <span v-else-if="row.tradeType === 3" :class="row.amount >= 0 ? 'profit' : 'loss'">
+              +{{ formatMoney(row.amount) }}
             </span>
             <span v-else>-</span>
           </template>
@@ -137,6 +144,16 @@ const transactions = ref([])
 const formatMoney = (value) => {
   if (!value && value !== 0) return '0.00'
   return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+const getTradeTypeLabel = (type) => {
+  const labels = { 1: t('statistics_page.buy_label'), 2: t('statistics_page.sell_label'), 3: t('group_page.dividend'), 4: t('group_page.allotment'), 5: t('fund_flow.initial_fund') }
+  return labels[type] || t('common.unknown')
+}
+
+const getTradeTagType = (type) => {
+  const types = { 1: 'success', 2: 'danger', 3: 'warning', 4: 'info', 5: '' }
+  return types[type] || ''
 }
 
 onMounted(async () => {
