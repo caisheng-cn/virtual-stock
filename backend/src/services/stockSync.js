@@ -73,11 +73,9 @@ async function startSync(marketType, recordId) {
     for (const stock of stocks) {
       const maxDate = latestDateMap[stock.stock_code]
       if (maxDate) {
-        const nextDay = new Date(maxDate)
-        nextDay.setDate(nextDay.getDate() + 1)
-        const startStr = nextDay.toISOString().split('T')[0]
-        if (startStr > today) continue
-        toSync.push({ ...stock.dataValues, startDate: startStr })
+        const fiveDaysBefore = new Date(maxDate)
+        fiveDaysBefore.setDate(fiveDaysBefore.getDate() - 5)
+        toSync.push({ ...stock.dataValues, startDate: fiveDaysBefore.toISOString().split('T')[0] })
       } else {
         const oneYearAgo = new Date()
         oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
@@ -85,8 +83,7 @@ async function startSync(marketType, recordId) {
       }
     }
 
-    const upToDateCount = stocks.length - toSync.length
-    let completed = upToDateCount, success = 0, fail = 0
+    let completed = 0, success = 0, fail = 0
     const failedStocks = []
 
     if (marketType === 1) {
@@ -111,7 +108,7 @@ async function startSync(marketType, recordId) {
                 close_price: d.closePrice,
                 volume: d.volume
               }))
-              await StockPrice.bulkCreate(records, { ignoreDuplicates: true, validate: false })
+              await StockPrice.bulkCreate(records, { updateOnDuplicate: ['stock_name', 'open_price', 'high_price', 'low_price', 'close_price', 'volume'], validate: false })
               await updateCache(stock, 1)
             }
             success++
@@ -177,7 +174,7 @@ async function startSync(marketType, recordId) {
                   close_price: d.close_price,
                   volume: d.volume
                 }))
-                await StockPrice.bulkCreate(records, { ignoreDuplicates: true, validate: false })
+              await StockPrice.bulkCreate(records, { updateOnDuplicate: ['stock_name', 'open_price', 'high_price', 'low_price', 'close_price', 'volume'], validate: false })
                 await updateCache(stock, marketType)
                 success++
               } else if (data && data.error) {

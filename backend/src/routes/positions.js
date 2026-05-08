@@ -9,7 +9,7 @@
  */
 
 const express = require('express')
-const { Position, UserBalance, StockPool, sequelize } = require('../models')
+const { Position, StockPool } = require('../models')
 const { Op } = require('sequelize')
 const auth = require('../utils/auth')
 const stockService = require('../services/stock')
@@ -26,11 +26,9 @@ const router = express.Router()
  */
 router.get('/', auth, async (req, res) => {
   try {
-    const hasCreatedAt = await checkColumnExists('positions', 'created_at')
-    
     const positions = await Position.findAll({ 
       where: { user_id: req.userId, shares: { [Op.gt]: 0 } },
-      order: hasCreatedAt ? [['created_at', 'DESC']] : [['id', 'DESC']]
+      order: [['created_at', 'DESC']]
     })
 
     const result = []
@@ -77,7 +75,7 @@ router.get('/', auth, async (req, res) => {
           marketValueOriginal: marketValueOriginal,
           floatingProfit: floatingProfit,
           floatingProfitRate: floatingProfitRate,
-          createdAt: hasCreatedAt && p.created_at ? p.created_at : new Date()
+          createdAt: formatDateStr(p.created_at) || new Date().toISOString().split('T')[0]
         })
       } catch (err) {
         console.log('Position quote error:', err.message, p.stock_code)
@@ -101,7 +99,7 @@ router.get('/', auth, async (req, res) => {
           marketValueOriginal: 0,
           floatingProfit: -parseFloat(p.total_cost),
           floatingProfitRate: -100,
-          createdAt: hasCreatedAt && p.created_at ? p.created_at : new Date()
+          createdAt: formatDateStr(p.created_at) || new Date().toISOString().split('T')[0]
         })
       }
     }
@@ -113,18 +111,17 @@ router.get('/', auth, async (req, res) => {
 })
 
 /**
- * Check whether a column exists in a database table by attempting a SELECT query.
- * @param {string} table - The table name
- * @param {string} column - The column name
- * @returns {Promise<boolean>} True if the column exists
+ * Format a Date to YYYY-MM-DD using local timezone (Asia/Shanghai).
+ * @param {Date} date - The date value
+ * @returns {string} Formatted date string
  */
-async function checkColumnExists(table, column) {
-  try {
-    const [results] = await sequelize.query(`SELECT ${column} FROM ${table} LIMIT 1`)
-    return true
-  } catch (e) {
-    return false
-  }
+function formatDateStr(date) {
+  if (!date) return ''
+  const d = new Date(date)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 module.exports = router

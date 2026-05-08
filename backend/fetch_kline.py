@@ -11,22 +11,27 @@ def fetch_hk_kline_akshare(symbol, start_date, end_date):
     """Fetch HK stock daily K-line data via AKShare."""
     try:
         import akshare as ak
-        start = start_date.replace('-', '')
-        end = end_date.replace('-', '')
-        df = ak.stock_hk_hist(symbol=symbol, period='daily',
-                              start_date=start, end_date=end,
-                              adjust='qfq')
+        df = ak.stock_hk_daily(symbol=symbol)
         if df is None or df.empty:
             return []
         data = []
         for _, row in df.iterrows():
+            trade_date = row['date']
+            if isinstance(trade_date, str):
+                date_str = trade_date
+            else:
+                date_str = trade_date.strftime('%Y-%m-%d')
+            if start_date and date_str < start_date:
+                continue
+            if end_date and date_str > end_date:
+                continue
             data.append({
-                'trade_date': str(row['日期']),
-                'open_price': round(float(row['开盘']), 4),
-                'high_price': round(float(row['最高']), 4),
-                'low_price': round(float(row['最低']), 4),
-                'close_price': round(float(row['收盘']), 4),
-                'volume': int(row['成交量'])
+                'trade_date': date_str,
+                'open_price': round(float(row['open']), 4),
+                'high_price': round(float(row['high']), 4),
+                'low_price': round(float(row['low']), 4),
+                'close_price': round(float(row['close']), 4),
+                'volume': int(row['volume'])
             })
         return data
     except Exception as e:

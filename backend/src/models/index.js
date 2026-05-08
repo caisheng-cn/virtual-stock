@@ -100,6 +100,7 @@ const Position = sequelize.define('Position', {
   shares: { type: DataTypes.INTEGER, defaultValue: 0 },
   avg_cost: { type: DataTypes.DECIMAL(15, 4), defaultValue: 0 },
   total_cost: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+  created_at: { type: DataTypes.DATE },
   updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'positions', timestamps: false })
 
