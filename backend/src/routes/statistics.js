@@ -9,7 +9,7 @@
  */
 
 const express = require('express')
-const { Transaction, UserBalance, Position, Group, sequelize } = require('../models')
+const { Transaction, UserBalance, Position, Group, StockPrice, sequelize } = require('../models')
 const { Op } = require('sequelize')
 const auth = require('../utils/auth')
 const { toCNY } = require('../utils/currency')
@@ -30,9 +30,6 @@ router.get('/profit', auth, async (req, res) => {
       return res.json({ code: -1, message: '数据不存在' })
     }
 
-    const cash = parseFloat(balance.cash)
-    const totalCost = parseFloat(balance.total_cost)
-
     const positions = await Position.findAll({ where: { user_id: req.userId, shares: { [Op.gt]: 0 } } })
     let totalMarketValue = 0
     let totalPositionCost = 0
@@ -44,7 +41,19 @@ router.get('/profit', auth, async (req, res) => {
         totalMarketValue += p.shares * priceInCNY
         totalPositionCost += parseFloat(p.total_cost)
       } catch (err) {
-        totalMarketValue += p.shares * parseFloat(p.avg_cost)
+        try {
+          const lastPrice = await StockPrice.findOne({
+            where: { stock_code: p.stock_code, market_type: p.market_type },
+            order: [['trade_date', 'DESC']]
+          })
+          if (lastPrice) {
+            totalMarketValue += p.shares * toCNY(parseFloat(lastPrice.close_price), p.market_type)
+          } else {
+            totalMarketValue += p.shares * parseFloat(p.avg_cost)
+          }
+        } catch (e) {
+          totalMarketValue += p.shares * parseFloat(p.avg_cost)
+        }
         totalPositionCost += parseFloat(p.total_cost)
       }
     }
@@ -104,7 +113,21 @@ router.get('/positions', auth, async (req, res) => {
         totalPositionCost += parseFloat(p.total_cost)
         totalFloatingProfit += marketValue - parseFloat(p.total_cost)
       } catch (err) {
-        totalMarketValue += p.shares * parseFloat(p.avg_cost)
+        try {
+          const lastPrice = await StockPrice.findOne({
+            where: { stock_code: p.stock_code, market_type: p.market_type },
+            order: [['trade_date', 'DESC']]
+          })
+          if (lastPrice) {
+            const priceInCNY = toCNY(parseFloat(lastPrice.close_price), p.market_type)
+            totalMarketValue += p.shares * priceInCNY
+            totalFloatingProfit += p.shares * priceInCNY - parseFloat(p.total_cost)
+          } else {
+            totalMarketValue += p.shares * parseFloat(p.avg_cost)
+          }
+        } catch (e) {
+          totalMarketValue += p.shares * parseFloat(p.avg_cost)
+        }
         totalPositionCost += parseFloat(p.total_cost)
       }
     }

@@ -271,9 +271,9 @@ const CommissionHistory = sequelize.define('CommissionHistory', {
 
 /**
  * GroupMessage model — table: group_messages
- * Trade activity messages broadcast to groups (buy, sell, dividend, allotment events).
+ * Trade activity messages broadcast to groups (buy, sell, dividend, allotment, option events).
  * Fields: id, group_id, user_id, message_type, stock_code, stock_name, market_type,
- * shares, price, amount, content, created_at
+ * shares, price, amount, content, option_type, strike_price, expiration_date, quantity, created_at
  */
 const GroupMessage = sequelize.define('GroupMessage', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
@@ -287,6 +287,10 @@ const GroupMessage = sequelize.define('GroupMessage', {
   price: { type: DataTypes.DECIMAL(15, 4) },
   amount: { type: DataTypes.DECIMAL(15, 2) },
   content: { type: DataTypes.STRING(500) },
+  option_type: { type: DataTypes.ENUM('call', 'put') },
+  strike_price: { type: DataTypes.DECIMAL(12, 2) },
+  expiration_date: { type: DataTypes.DATEONLY },
+  quantity: { type: DataTypes.INTEGER },
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'group_messages', timestamps: false })
 
@@ -337,6 +341,102 @@ const StockSyncRecord = sequelize.define('StockSyncRecord', {
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'stock_sync_records', timestamps: false })
 
+/**
+ * OptionWhitelist model — table: option_whitelist
+ * Whitelist of stocks eligible for options trading.
+ */
+const OptionWhitelist = sequelize.define('OptionWhitelist', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  stock_code: { type: DataTypes.STRING(20), allowNull: false },
+  market_type: { type: DataTypes.TINYINT, allowNull: false },
+  stock_name: { type: DataTypes.STRING(100), allowNull: false },
+  status: { type: DataTypes.TINYINT, defaultValue: 1 },
+  created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, { tableName: 'option_whitelist', timestamps: false })
+
+/**
+ * OptionContract model — table: option_contracts
+ * Defines individual option contracts with strike, expiration, and type.
+ */
+const OptionContract = sequelize.define('OptionContract', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  stock_code: { type: DataTypes.STRING(20), allowNull: false },
+  market_type: { type: DataTypes.TINYINT, allowNull: false },
+  stock_name: { type: DataTypes.STRING(100), allowNull: false },
+  option_type: { type: DataTypes.ENUM('call', 'put'), allowNull: false },
+  strike_price: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  expiration_date: { type: DataTypes.DATEONLY, allowNull: false },
+  contract_code: { type: DataTypes.STRING(50), allowNull: false },
+  contract_multiplier: { type: DataTypes.INTEGER, defaultValue: 100 },
+  status: { type: DataTypes.TINYINT, defaultValue: 1 },
+  underlying_price: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, { tableName: 'option_contracts', timestamps: false })
+
+/**
+ * OptionPosition model — table: option_positions
+ * User holdings of option contracts.
+ */
+const OptionPosition = sequelize.define('OptionPosition', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  user_id: { type: DataTypes.INTEGER, allowNull: false },
+  group_id: { type: DataTypes.INTEGER, allowNull: false },
+  contract_id: { type: DataTypes.INTEGER, allowNull: false },
+  quantity: { type: DataTypes.INTEGER, defaultValue: 0 },
+  avg_cost: { type: DataTypes.DECIMAL(12, 4), defaultValue: 0 },
+  total_cost: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
+  status: { type: DataTypes.TINYINT, defaultValue: 1 },
+  created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, { tableName: 'option_positions', timestamps: false })
+
+/**
+ * OptionTransaction model — table: option_transactions
+ * Records all option trading activity (open, close, exercise, settlement).
+ */
+const OptionTransaction = sequelize.define('OptionTransaction', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  user_id: { type: DataTypes.INTEGER, allowNull: false },
+  group_id: { type: DataTypes.INTEGER, allowNull: false },
+  contract_id: { type: DataTypes.INTEGER, allowNull: false },
+  stock_code: { type: DataTypes.STRING(20), allowNull: false },
+  stock_name: { type: DataTypes.STRING(100) },
+  option_type: { type: DataTypes.ENUM('call', 'put'), allowNull: false },
+  strike_price: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  expiration_date: { type: DataTypes.DATEONLY, allowNull: false },
+  trade_type: { type: DataTypes.TINYINT, allowNull: false },
+  quantity: { type: DataTypes.INTEGER, allowNull: false },
+  price: { type: DataTypes.DECIMAL(12, 4), allowNull: false },
+  premium: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+  commission: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  commission_rate: { type: DataTypes.DECIMAL(6, 4), defaultValue: 0 },
+  profit: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
+  balance_after: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
+  trade_date: { type: DataTypes.DATEONLY, allowNull: false },
+  settlement_amount: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
+  status: { type: DataTypes.TINYINT, defaultValue: 1 },
+  created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, { tableName: 'option_transactions', timestamps: false })
+
+/**
+ * OptionPrice model — table: option_prices
+ * Daily pricing snapshots for option contracts (premium, Greeks).
+ */
+const OptionPrice = sequelize.define('OptionPrice', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  contract_id: { type: DataTypes.INTEGER, allowNull: false },
+  trade_date: { type: DataTypes.DATEONLY, allowNull: false },
+  premium: { type: DataTypes.DECIMAL(12, 4), allowNull: false },
+  intrinsic_value: { type: DataTypes.DECIMAL(12, 4), defaultValue: 0 },
+  time_value: { type: DataTypes.DECIMAL(12, 4), defaultValue: 0 },
+  delta: { type: DataTypes.DECIMAL(6, 4), defaultValue: 0 },
+  implied_volatility: { type: DataTypes.DECIMAL(6, 4), defaultValue: 0 },
+  underlying_price: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, { tableName: 'option_prices', timestamps: false })
+
 module.exports = {
   sequelize,
   User,
@@ -357,5 +457,10 @@ module.exports = {
   GroupMessage,
   MessageLike,
   MessageReply,
-  StockSyncRecord
+  StockSyncRecord,
+  OptionWhitelist,
+  OptionContract,
+  OptionPosition,
+  OptionTransaction,
+  OptionPrice
 }

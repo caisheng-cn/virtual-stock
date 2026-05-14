@@ -9,7 +9,7 @@
  */
 
 const express = require('express')
-const { Position, StockPool } = require('../models')
+const { Position, StockPool, StockPrice } = require('../models')
 const { Op } = require('sequelize')
 const auth = require('../utils/auth')
 const stockService = require('../services/stock')
@@ -26,8 +26,12 @@ const router = express.Router()
  */
 router.get('/', auth, async (req, res) => {
   try {
+    const groupId = req.query.group_id ? parseInt(req.query.group_id) : null
+    const positionWhere = groupId 
+      ? { user_id: req.userId, group_id: groupId, shares: { [Op.gt]: 0 } }
+      : { user_id: req.userId, shares: { [Op.gt]: 0 } }
     const positions = await Position.findAll({ 
-      where: { user_id: req.userId, shares: { [Op.gt]: 0 } },
+      where: positionWhere,
       order: [['created_at', 'DESC']]
     })
 
@@ -46,11 +50,11 @@ router.get('/', auth, async (req, res) => {
         if (quote.stockName && quote.stockName.length > 3 && quote.stockName !== p.stock_code) {
           stockName = quote.stockName
         }
-        
+
         const priceInCNY = toCNY(quote.price, p.market_type)
         const marketValue = p.shares * priceInCNY
         const marketValueOriginal = p.shares * quote.price
-        
+
         const floatingProfit = marketValue - parseFloat(p.total_cost)
         const floatingProfitRate = parseFloat(p.total_cost) > 0 ? (floatingProfit / parseFloat(p.total_cost)) * 100 : 0
         const currency = getCurrencySymbol(p.market_type)
@@ -82,6 +86,23 @@ router.get('/', auth, async (req, res) => {
         const currency = getCurrencySymbol(p.market_type)
         const avgCostOriginal = p.market_type === 1 ? parseFloat(p.avg_cost) : fromCNY(parseFloat(p.avg_cost), p.market_type)
         const totalCostOriginal = p.market_type === 1 ? parseFloat(p.total_cost) : fromCNY(parseFloat(p.total_cost), p.market_type)
+        let lastClose = 0
+        let lastCloseCNY = 0
+        try {
+          const lastPrice = await StockPrice.findOne({
+            where: { stock_code: p.stock_code, market_type: p.market_type },
+            order: [['trade_date', 'DESC']]
+          })
+          if (lastPrice) {
+            lastClose = parseFloat(lastPrice.close_price)
+            lastCloseCNY = toCNY(lastClose, p.market_type)
+          }
+        } catch (e) {}
+        const currentPrice = lastClose
+        const currentPriceCNY = lastCloseCNY
+        const marketValueCNY = p.shares * currentPriceCNY
+        const floatingProfit = marketValueCNY - parseFloat(p.total_cost)
+        const floatingProfitRate = parseFloat(p.total_cost) > 0 ? (floatingProfit / parseFloat(p.total_cost)) * 100 : 0
         result.push({
           id: p.id,
           stockCode: p.stock_code,
@@ -93,12 +114,12 @@ router.get('/', auth, async (req, res) => {
           totalCost: totalCostOriginal,
           avgCostCNY: parseFloat(p.avg_cost),
           totalCostCNY: parseFloat(p.total_cost),
-          currentPrice: 0,
-          currentPriceCNY: 0,
-          marketValue: 0,
-          marketValueOriginal: 0,
-          floatingProfit: -parseFloat(p.total_cost),
-          floatingProfitRate: -100,
+          currentPrice: currentPrice,
+          currentPriceCNY: currentPriceCNY,
+          marketValue: marketValueCNY,
+          marketValueOriginal: currentPrice * p.shares,
+          floatingProfit: floatingProfit,
+          floatingProfitRate: floatingProfitRate,
           createdAt: formatDateStr(p.created_at) || new Date().toISOString().split('T')[0]
         })
       }

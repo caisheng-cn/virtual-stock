@@ -133,7 +133,6 @@
 
 2，消息中，要显示股票代码，股票名称，股票市场，单价和总价信息。
 
-
 20260505 美股和港股数据获得的免费通道：[akfamily/akquant: AKQuant is a high-performance quantitative research and trading framework built on Rust and Python! 开源量化回测框架](https://github.com/akfamily/akquant)
 
 2个问题：
@@ -148,3 +147,10 @@ TODO
 4，增加一个测试人员账号，确认分组功能，组内比较功能等。
 
 5，个人账户变化曲线
+
+
+2026-5-13
+
+在群组广场页面中，查看成员交易记录，股票持仓表格中，股票的均价和现价应该显示币种，浮盈亏和市值应该换算为人民币。
+
+在收益统计页面中，金额和收益列统一换算为人民币，可以不附加单位，股票价格需要区分是人民币，港币还是美元，需要附带币种单位

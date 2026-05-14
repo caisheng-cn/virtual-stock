@@ -18,26 +18,26 @@
         <el-col :xs="24" :sm="12" :md="8">
           <div class="card">
             <div class="card-title">{{ $t('nav.available_funds') }}</div>
-            <div class="card-value">{{ formatMoney(balance?.cash) || '0.00' }} RMB</div>
+            <div class="card-value">¥{{ formatMoney(balance?.cash) || '0.00' }}</div>
           </div>
         </el-col>
         <el-col :xs="24" :sm="12" :md="8">
           <div class="card">
             <div class="card-title">{{ $t('nav.total_assets') }}</div>
-            <div class="card-value">{{ formatMoney(balance?.totalAssets) || '0.00' }} RMB</div>
+            <div class="card-value">¥{{ formatMoney(balance?.totalAssets) || '0.00' }}</div>
           </div>
         </el-col>
         <el-col :xs="24" :sm="12" :md="8">
           <div class="card">
             <div class="card-title">{{ $t('nav.market_value') }}</div>
-            <div class="card-value">{{ formatMoney(balance?.totalMarketValue) || '0.00' }} RMB</div>
+            <div class="card-value">¥{{ formatMoney(balance?.totalMarketValue) || '0.00' }}</div>
           </div>
         </el-col>
         <el-col :xs="24" :sm="12" :md="8">
           <div class="card">
             <div class="card-title">{{ $t('nav.profit_amount') }}</div>
             <div class="card-value" :class="balance?.profit >= 0 ? 'profit' : 'loss'">
-              {{ balance?.profit >= 0 ? '+' : '' }}{{ formatMoney(balance?.profit) || '0.00' }} RMB
+              {{ balance?.profit >= 0 ? '+' : '' }}¥{{ formatMoney(balance?.profit) || '0.00' }}
             </div>
           </div>
         </el-col>
@@ -48,6 +48,12 @@
           <div class="nav-card" @click="$router.push('/trade')">
             <div class="nav-icon">📈</div>
             <div class="nav-text">{{ $t('nav.trade') }}</div>
+          </div>
+        </el-col>
+        <el-col :xs="12" :sm="8" :md="8">
+          <div class="nav-card" @click="$router.push('/options')">
+            <div class="nav-icon">📊</div>
+            <div class="nav-text">{{ $t('nav.options') }}</div>
           </div>
         </el-col>
         <el-col :xs="12" :sm="8" :md="8">
@@ -144,12 +150,13 @@ const switchLang = (lang) => {
  */
 onMounted(async () => {
   try {
-    const [groupsRes, balanceRes, unreadRes] = await Promise.all([
-      getMyGroups(),
-      getBalance(),
+    const groupsRes = await getMyGroups()
+    groups.value = groupsRes.data || []
+    const groupId = groups.value.length > 0 ? groups.value[0].groupId : null
+    const [balanceRes, unreadRes] = await Promise.all([
+      getBalance(groupId),
       getUnreadCount()
     ])
-    groups.value = groupsRes.data || []
     balance.value = balanceRes.data
     unreadCount.value = unreadRes.data || 0
   } catch (err) {

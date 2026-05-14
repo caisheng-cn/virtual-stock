@@ -10,6 +10,7 @@
  */
 
 const express = require('express')
+const { Op } = require('sequelize')
 const { Transaction, Position, UserBalance, User, StockPricesCache, MarketConfig, GroupMessage, UserGroup, sequelize } = require('../models')
 const auth = require('../utils/auth')
 const stockService = require('../services/stock')
@@ -123,7 +124,8 @@ const checkTradeTime = async (marketType, res) => {
 router.post('/buy', auth, async (req, res) => {
    const t = await sequelize.transaction()
    try {
-     const { stock_code, market_type, shares } = req.body
+      const { stock_code, market_type, shares, group_id: groupIdParam } = req.body
+      const group_id = groupIdParam ? parseInt(groupIdParam) : 0
      if (!stock_code || !market_type || !shares) {
        return res.json({ code: -1, message: res.t('trade.parameter_missing') })
      }
@@ -146,17 +148,21 @@ router.post('/buy', auth, async (req, res) => {
     const commission = commissionService.calculateCommission(amount, commissionRate)
     const totalDeduct = amount + commission
 
-     const balance = await UserBalance.findOne({ where: { user_id: req.userId } })
-     if (!balance) {
-       return res.json({ code: -1, message: res.t('trade.account_not_exist') })
-     }
-     if (parseFloat(balance.cash) < totalDeduct) {
-       return res.json({ code: -1, message: res.t('trade.insufficient_balance_with_commission') })
-     }
+      let balance = await UserBalance.findOne({ where: { user_id: req.userId, group_id } })
+      if (!balance) {
+        balance = await UserBalance.findOne({ where: { user_id: req.userId } })
+      }
+      if (!balance) {
+        return res.json({ code: -1, message: res.t('trade.account_not_exist') })
+      }
+      const actualGroupId = balance.group_id
+      if (parseFloat(balance.cash) < totalDeduct) {
+        return res.json({ code: -1, message: res.t('trade.insufficient_balance_with_commission') })
+      }
 
-    const today = new Date().toISOString().split('T')[0]
+     const today = new Date().toISOString().split('T')[0]
 
-    const existingPosition = await Position.findOne({ where: { user_id: req.userId, stock_code } })
+     const existingPosition = await Position.findOne({ where: { user_id: req.userId, stock_code, group_id: { [Op.in]: [group_id, 0] } } })
     if (existingPosition) {
       const newShares = existingPosition.shares + shares
       const newTotalCost = parseFloat(existingPosition.total_cost) + amount + commission
@@ -171,21 +177,22 @@ router.post('/buy', auth, async (req, res) => {
         user_id: req.userId,
         stock_code,
         market_type,
+        group_id: actualGroupId,
         shares,
         avg_cost: (amount + commission) / shares,
         total_cost: amount + commission
       }, { transaction: t })
     }
 
-    await UserBalance.decrement('cash', { by: totalDeduct, where: { user_id: req.userId }, transaction: t })
-    await UserBalance.increment('total_cost', { by: amount, where: { user_id: req.userId }, transaction: t })
+    await UserBalance.decrement('cash', { by: totalDeduct, where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
+    await UserBalance.increment('total_cost', { by: amount, where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
 
-    const currentBalance = await UserBalance.findOne({ where: { user_id: req.userId }, transaction: t })
-    const balanceAfterBuy = parseFloat(currentBalance.cash)
+    const currentBalance = await UserBalance.findOne({ where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
+    const balanceAfterBuy = currentBalance ? parseFloat(currentBalance.cash) : 0
 
     await Transaction.create({
       user_id: req.userId,
-      group_id: 0,
+      group_id: actualGroupId,
       stock_code,
       stock_name: quote.stockName,
       market_type,
@@ -237,30 +244,40 @@ router.post('/buy', auth, async (req, res) => {
 router.post('/sell', auth, async (req, res) => {
    const t = await sequelize.transaction()
    try {
-     const { stock_code, market_type, shares } = req.body
-     if (!stock_code || !market_type || !shares) {
-       return res.json({ code: -1, message: res.t('trade.parameter_missing') })
+      const { stock_code, market_type, shares, group_id: groupIdParam } = req.body
+      const group_id = groupIdParam ? parseInt(groupIdParam) : 0
+      if (!stock_code || !market_type || !shares) {
+        return res.json({ code: -1, message: res.t('trade.parameter_missing') })
+      }
+
+      const user = await User.findByPk(req.userId)
+      if (!user) {
+        return res.json({ code: -1, message: res.t('auth.user_not_found') })
+      }
+     const check = await checkTradeEnabled(user, res)
+     if (check) return
+
+     const tradeCheck = await checkTradeTime(market_type, res)
+     if (tradeCheck) return
+
+     const quote = await stockService.getQuote(stock_code, market_type)
+     const priceInCNY = toCNY(quote.price, market_type)
+     const amount = priceInCNY * shares
+
+     const commissionRate = await commissionService.getCommissionRate(market_type, 2)
+     const commission = commissionService.calculateCommission(amount, commissionRate)
+     const netAmount = amount - commission
+
+     let balance = await UserBalance.findOne({ where: { user_id: req.userId, group_id } })
+     if (!balance) {
+       balance = await UserBalance.findOne({ where: { user_id: req.userId } })
      }
-
-     const user = await User.findByPk(req.userId)
-     if (!user) {
-       return res.json({ code: -1, message: res.t('auth.user_not_found') })
+     if (!balance) {
+       return res.json({ code: -1, message: res.t('trade.account_not_exist') })
      }
-    const check = await checkTradeEnabled(user, res)
-    if (check) return
+     const actualGroupId = balance.group_id
 
-    const tradeCheck = await checkTradeTime(market_type, res)
-    if (tradeCheck) return
-
-    const quote = await stockService.getQuote(stock_code, market_type)
-    const priceInCNY = toCNY(quote.price, market_type)
-    const amount = priceInCNY * shares
-
-    const commissionRate = await commissionService.getCommissionRate(market_type, 2)
-    const commission = commissionService.calculateCommission(amount, commissionRate)
-    const netAmount = amount - commission
-
-     const position = await Position.findOne({ where: { user_id: req.userId, stock_code } })
+      const position = await Position.findOne({ where: { user_id: req.userId, stock_code, group_id: { [Op.in]: [group_id, 0] } } })
      if (!position || position.shares < shares) {
        return res.json({ code: -1, message: res.t('trade.position_not_enough') })
      }
@@ -275,8 +292,8 @@ router.post('/sell', auth, async (req, res) => {
       ? parseFloat(position.total_cost) 
       : (parseFloat(position.avg_cost) * shares)
 
-    await UserBalance.increment('cash', { by: netAmount, where: { user_id: req.userId }, transaction: t })
-    await UserBalance.decrement('total_cost', { by: costToDecrement, where: { user_id: req.userId }, transaction: t })
+     await UserBalance.increment('cash', { by: netAmount, where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
+     await UserBalance.decrement('total_cost', { by: costToDecrement, where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
 
     if (position.shares === shares) {
       await Position.destroy({ where: { id: position.id }, transaction: t })
@@ -291,12 +308,12 @@ router.post('/sell', auth, async (req, res) => {
       }, { where: { id: position.id }, transaction: t })
     }
 
-    const currentBalance = await UserBalance.findOne({ where: { user_id: req.userId }, transaction: t })
-    const balanceAfterSell = parseFloat(currentBalance.cash)
+     const currentBalance = await UserBalance.findOne({ where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
+     const balanceAfterSell = currentBalance ? parseFloat(currentBalance.cash) : 0
 
-    await Transaction.create({
-      user_id: req.userId,
-      group_id: 0,
+     await Transaction.create({
+       user_id: req.userId,
+       group_id: actualGroupId,
       stock_code,
       stock_name: quote.stockName,
       market_type,

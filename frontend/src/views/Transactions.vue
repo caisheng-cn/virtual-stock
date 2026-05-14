@@ -13,7 +13,7 @@
         <el-col :xs="24" :sm="8">
           <div class="balance-item">
             <span class="label">{{ $t('transactions_page.account_balance') }}</span>
-            <span class="value">{{ formatMoney(balance) }} RMB</span>
+            <span class="value">¥{{ formatMoney(balance) }}</span>
           </div>
         </el-col>
       </el-row>
@@ -69,12 +69,12 @@
         </el-table-column>
         <el-table-column :label="$t('transactions_page.commission')" width="130">
           <template #default="{ row }">
-            <span class="commission">{{ formatMoney(row.commission) }} RMB</span>
+            <span class="commission">¥{{ formatMoney(row.commission) }}</span>
             <span class="commission-rate">({{ formatCommissionRate(row.commissionRate) }})</span>
           </template>
         </el-table-column>
         <el-table-column :label="$t('transactions_page.balance')" width="120">
-          <template #default="{ row }">{{ formatMoney(row.balanceAfter) }} RMB</template>
+          <template #default="{ row }">¥{{ formatMoney(row.balanceAfter) }}</template>
         </el-table-column>
       </el-table>
 

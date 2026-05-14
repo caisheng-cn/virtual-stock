@@ -6,11 +6,20 @@
     </div>
 
     <el-card class="market-tabs">
-      <el-radio-group v-model="marketType" @change="handleMarketChange">
-        <el-radio-button :label="1">{{ $t('market.a_share') }}</el-radio-button>
-        <el-radio-button :label="2">{{ $t('market.hk_stock') }}</el-radio-button>
-        <el-radio-button :label="3">{{ $t('market.us_stock') }}</el-radio-button>
-      </el-radio-group>
+      <el-row :gutter="16" align="middle">
+        <el-col :span="16">
+          <el-radio-group v-model="marketType" @change="handleMarketChange">
+            <el-radio-button :label="1">{{ $t('market.a_share') }}</el-radio-button>
+            <el-radio-button :label="2">{{ $t('market.hk_stock') }}</el-radio-button>
+            <el-radio-button :label="3">{{ $t('market.us_stock') }}</el-radio-button>
+          </el-radio-group>
+        </el-col>
+        <el-col :span="8">
+          <el-select v-model="currentGroupId" :placeholder="$t('group_page.select_group')" style="width:100%">
+            <el-option v-for="g in groups" :key="g.groupId" :label="g.groupName" :value="g.groupId" />
+          </el-select>
+        </el-col>
+      </el-row>
     </el-card>
 
     <el-row :gutter="[16, 16]">
@@ -155,7 +164,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { getStockList, getStockQuote, getStockHistory, getCommissionConfigs } from '@/api/stock'
 import { buyStock, sellStock, getPositions } from '@/api/trade'
-import { getBalance } from '@/api/group'
+import { getMyGroups, getBalance } from '@/api/group'
 
 const { t } = useI18n()
 
@@ -179,6 +188,8 @@ const searchLoading = ref(false)
 const selectedSearchStock = ref(null)
 let searchTimer = null
 const loading = ref(false)
+const groups = ref([])
+const currentGroupId = ref(null)
 const userCash = ref(0)
 const positionShares = ref(0)
 const chartContainer = ref(null)
@@ -284,9 +295,18 @@ const formatMoney = (value) => {
   return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadCommissionConfigs()
   window.addEventListener('resize', handleResize)
+  try {
+    const res = await getMyGroups()
+    groups.value = res.data || []
+    if (groups.value.length > 0) {
+      currentGroupId.value = groups.value[0].groupId
+    }
+  } catch (e) {
+    console.error('Failed to load groups:', e)
+  }
 })
 
 onUnmounted(() => {
@@ -616,9 +636,10 @@ const onStockSelected = async (stock) => {
   selectedStock.value = stock
 
   // Fetch quote, balance, and positions in parallel
+  const group_id = currentGroupId.value
   const [quoteRes, balanceRes, posRes] = await Promise.all([
     getStockQuote(stock.stock_code, stock.market_type).catch(() => ({ data: null })),
-    getBalance().catch(() => ({ data: null })),
+    getBalance(group_id).catch(() => ({ data: null })),
     getPositions().catch(() => [])
   ])
 
@@ -678,19 +699,19 @@ const handleTrade = async () => {
 
   loading.value = true
   try {
+    const payload = {
+      stock_code: selectedStock.value.stock_code,
+      market_type: marketType.value,
+      shares: tradeForm.shares
+    }
+    if (currentGroupId.value) {
+      payload.group_id = currentGroupId.value
+    }
     if (isBuy) {
-      await buyStock({
-        stock_code: selectedStock.value.stock_code,
-        market_type: marketType.value,
-        shares: tradeForm.shares
-      })
+      await buyStock(payload)
       ElMessage.success(t('trade_page.buy_success'))
     } else {
-      await sellStock({
-        stock_code: selectedStock.value.stock_code,
-        market_type: marketType.value,
-        shares: tradeForm.shares
-      })
+      await sellStock(payload)
       ElMessage.success(t('trade_page.sell_success'))
     }
     tradeForm.shares = 100

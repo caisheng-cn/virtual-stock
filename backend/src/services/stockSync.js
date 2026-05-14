@@ -87,7 +87,7 @@ async function startSync(marketType, recordId) {
     const failedStocks = []
 
     if (marketType === 1) {
-      const CONCURRENCY = 8
+      const CONCURRENCY = 5
       const queueA = [...toSync]
       let cancelledA = false
       await Promise.all(Array(CONCURRENCY).fill().map(async () => {

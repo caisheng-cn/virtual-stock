@@ -9,9 +9,10 @@
  */
 
 const express = require('express')
-const { Group, UserGroup, User, UserBalance, Position, StockPricesCache, StockPool, Transaction, sequelize } = require('../models')
+const { Group, UserGroup, User, UserBalance, Position, StockPrice, StockPool, Transaction, sequelize } = require('../models')
 const { Op } = require('sequelize')
 const auth = require('../utils/auth')
+const { toCNY, fromCNY, getCurrencySymbol } = require('../utils/currency')
 
 const router = express.Router()
 
@@ -159,16 +160,30 @@ router.post('/leave', auth, async (req, res) => {
  * @returns {Promise<{cash: number, initCash: number, totalMarketValue: number, totalAssets: number, profit: number, profitRate: number}>}
  */
 async function getMemberAssets(userId, groupId) {
-  const balance = await UserBalance.findOne({ where: { user_id: userId, group_id: groupId } })
+  let balance = await UserBalance.findOne({ where: { user_id: userId, group_id: groupId } })
+  if (!balance) {
+    balance = await UserBalance.findOne({ where: { user_id: userId } })
+  }
+  const balanceGroupId = balance ? balance.group_id : groupId
   const cash = balance ? parseFloat(balance.cash) : 0
-  const initCash = balance ? parseFloat(balance.init_cash) || 0 : 0
+  let initCash = balance ? parseFloat(balance.init_cash) : 0
+  if (!initCash) {
+    const group = await Group.findByPk(balanceGroupId)
+    initCash = group ? parseFloat(group.init_cash) : 0
+  }
+  if (!initCash) initCash = 0
 
-  const positions = await Position.findAll({ where: { user_id: userId, shares: { [Op.gt]: 0 } } })
+  const positions = await Position.findAll({ where: { user_id: userId, group_id: { [Op.in]: [balanceGroupId, 0] }, shares: { [Op.gt]: 0 } } })
   let totalMarketValue = 0
   for (const p of positions) {
-    const cache = await StockPricesCache.findOne({ where: { stock_code: p.stock_code, market_type: p.market_type } })
-    if (cache) {
-      totalMarketValue += p.shares * parseFloat(cache.close_price)
+    const lastPrice = await StockPrice.findOne({
+      where: { stock_code: p.stock_code, market_type: p.market_type },
+      order: [['trade_date', 'DESC']]
+    })
+    if (lastPrice) {
+      totalMarketValue += p.shares * toCNY(parseFloat(lastPrice.close_price), p.market_type)
+    } else {
+      totalMarketValue += p.shares * parseFloat(p.avg_cost)
     }
   }
 
@@ -186,7 +201,7 @@ async function getMemberAssets(userId, groupId) {
  */
 router.get('/:groupId/ranking', auth, async (req, res) => {
   try {
-    const { groupId } = req.params
+    const groupId = parseInt(req.params.groupId)
     const members = await UserGroup.findAll({ where: { group_id: groupId } })
     const userIds = members.map(m => m.user_id)
     const users = await User.findAll({ where: { id: userIds }, attributes: ['id', 'nickname', 'username'] })
@@ -240,7 +255,12 @@ router.get('/:groupId/members/:userId/details', auth, async (req, res) => {
 
     const assets = await getMemberAssets(parseInt(userId), parseInt(groupId))
 
-    const positions = await Position.findAll({ where: { user_id: userId, shares: { [Op.gt]: 0 } } })
+    let memberBalance = await UserBalance.findOne({ where: { user_id: userId, group_id: groupId } })
+    if (!memberBalance) {
+      memberBalance = await UserBalance.findOne({ where: { user_id: userId } })
+    }
+    const memberGroupId = memberBalance ? memberBalance.group_id : parseInt(groupId)
+  const positions = await Position.findAll({ where: { user_id: userId, group_id: { [Op.in]: [memberGroupId, 0] }, shares: { [Op.gt]: 0 } } })
     const positionList = []
     for (const p of positions) {
       let stockName = ''
@@ -248,19 +268,29 @@ router.get('/:groupId/members/:userId/details', auth, async (req, res) => {
         const pool = await StockPool.findOne({ where: { stock_code: p.stock_code, market_type: p.market_type } })
         if (pool) stockName = pool.stock_name
       } catch (e) {}
-      const cache = await StockPricesCache.findOne({ where: { stock_code: p.stock_code, market_type: p.market_type } })
-      const currentPrice = cache ? parseFloat(cache.close_price) : 0
-      const marketValue = p.shares * currentPrice
-      const avgCost = parseFloat(p.avg_cost) || 0
+      const lastPrice = await StockPrice.findOne({
+        where: { stock_code: p.stock_code, market_type: p.market_type },
+        order: [['trade_date', 'DESC']]
+      })
+      const currentPriceOriginal = lastPrice ? parseFloat(lastPrice.close_price) : fromCNY(parseFloat(p.avg_cost), p.market_type)
+      const priceInCNY = toCNY(currentPriceOriginal, p.market_type)
+      const marketValueCNY = p.shares * priceInCNY
+      const avgCostCNY = parseFloat(p.avg_cost) || 0
+      const avgCostOriginal = fromCNY(avgCostCNY, p.market_type)
+      const floatingProfitCNY = marketValueCNY - (p.shares * avgCostCNY)
+      const currency = getCurrencySymbol(p.market_type)
       positionList.push({
         stockCode: p.stock_code,
         stockName: stockName || p.stock_code,
         marketType: p.market_type,
+        currency,
         shares: p.shares,
-        avgCost,
-        currentPrice,
-        marketValue,
-        floatingProfit: marketValue - (p.shares * avgCost),
+        avgCost: avgCostOriginal,
+        avgCostCNY,
+        currentPrice: currentPriceOriginal,
+        currentPriceCNY: priceInCNY,
+        marketValue: marketValueCNY,
+        floatingProfit: floatingProfitCNY,
         totalCost: parseFloat(p.total_cost) || 0
       })
     }

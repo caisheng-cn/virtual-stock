@@ -23,12 +23,12 @@
         </el-table-column>
         <el-table-column prop="nickname" :label="$t('group_page.nickname')" />
         <el-table-column prop="totalAssets" :label="$t('group_page.total_assets')" width="130">
-          <template #default="{ row }">{{ formatMoney(row.totalAssets) || '-' }}</template>
+          <template #default="{ row }">¥{{ formatMoney(row.totalAssets) || '-' }}</template>
         </el-table-column>
         <el-table-column prop="profit" :label="$t('group_page.profit')" width="130">
           <template #default="{ row }">
             <span :class="row.profit >= 0 ? 'profit' : 'loss'">
-              {{ row.profit >= 0 ? '+' : '' }}{{ formatMoney(row.profit) }}
+              {{ row.profit >= 0 ? '+' : '' }}¥{{ formatMoney(row.profit) }}
             </span>
           </template>
         </el-table-column>
@@ -81,20 +81,20 @@
           <el-col :xs="12" :sm="12" :md="6">
             <div class="summary-card">
               <div class="summary-label">{{ $t('group_page.available_cash') }}</div>
-              <div class="summary-value">{{ formatMoney(memberDetail.balance.cash) }} RMB</div>
+              <div class="summary-value">¥{{ formatMoney(memberDetail.balance.cash) }}</div>
             </div>
           </el-col>
           <el-col :xs="12" :sm="12" :md="6">
             <div class="summary-card">
               <div class="summary-label">{{ $t('group_page.total_assets') }}</div>
-              <div class="summary-value">{{ formatMoney(memberDetail.balance.totalAssets) }} RMB</div>
+              <div class="summary-value">¥{{ formatMoney(memberDetail.balance.totalAssets) }}</div>
             </div>
           </el-col>
           <el-col :xs="12" :sm="12" :md="6">
             <div class="summary-card">
               <div class="summary-label">{{ $t('group_page.profit') }}</div>
               <div class="summary-value" :class="memberDetail.balance.profit >= 0 ? 'profit' : 'loss'">
-                {{ memberDetail.balance.profit >= 0 ? '+' : '' }}{{ formatMoney(memberDetail.balance.profit) }} RMB
+                {{ memberDetail.balance.profit >= 0 ? '+' : '' }}¥{{ formatMoney(memberDetail.balance.profit) }}
               </div>
             </div>
           </el-col>
@@ -111,33 +111,69 @@
         <el-divider style="margin:12px 0" />
 
         <div style="margin-bottom:8px;font-weight:bold;font-size:14px">{{ $t('group_page.positions') }}</div>
-        <el-table :data="memberDetail.positions" stripe size="small" v-if="memberDetail.positions.length > 0">
-          <el-table-column prop="stockCode" :label="$t('group_page.stock_code')" width="100" />
-          <el-table-column prop="stockName" :label="$t('group_page.stock_name')" />
-          <el-table-column prop="marketType" :label="$t('group_page.market_type')" width="70">
-            <template #default="{ row }">{{ getMarketTypeLabel(row.marketType) }}</template>
-          </el-table-column>
-          <el-table-column prop="shares" :label="$t('group_page.shares')" width="80" />
-          <el-table-column prop="avgCost" :label="$t('group_page.avg_cost')" width="100">
-            <template #default="{ row }">{{ formatMoney(row.avgCost) }}</template>
-          </el-table-column>
-          <el-table-column prop="currentPrice" :label="$t('group_page.current_price')" width="100">
-            <template #default="{ row }">{{ formatMoney(row.currentPrice) }}</template>
-          </el-table-column>
-          <el-table-column prop="marketValue" :label="$t('group_page.market_value')" width="110">
-            <template #default="{ row }">{{ formatMoney(row.marketValue) }}</template>
-          </el-table-column>
-          <el-table-column prop="floatingProfit" :label="$t('group_page.floating_profit')" width="110">
-            <template #default="{ row }">
-              <span :class="row.floatingProfit >= 0 ? 'profit' : 'loss'">
-                {{ row.floatingProfit >= 0 ? '+' : '' }}{{ formatMoney(row.floatingProfit) }}
-              </span>
-            </template>
-          </el-table-column>
-        </el-table>
-        <div v-else style="text-align:center;padding:20px;color:#999">
-          {{ $t('group_page.no_positions') }}
-        </div>
+        <el-tabs v-model="detailPosTab" class="detail-pos-tabs">
+          <el-tab-pane :label="$t('group_page.stock_position_tab')" name="stock">
+            <el-table :data="memberDetail.positions" stripe size="small" v-if="memberDetail.positions.length > 0">
+              <el-table-column prop="stockCode" :label="$t('group_page.stock_code')" width="100" />
+              <el-table-column prop="stockName" :label="$t('group_page.stock_name')" />
+              <el-table-column prop="marketType" :label="$t('group_page.market_type')" width="70">
+                <template #default="{ row }">{{ getMarketTypeLabel(row.marketType) }}</template>
+              </el-table-column>
+              <el-table-column prop="shares" :label="$t('group_page.shares')" width="80" />
+              <el-table-column prop="avgCost" :label="$t('group_page.avg_cost')" width="110">
+                <template #default="{ row }">{{ getCurrencySymbol(row.marketType) }}{{ formatMoney(row.avgCost) }}</template>
+              </el-table-column>
+              <el-table-column prop="currentPrice" :label="$t('group_page.current_price')" width="110">
+                <template #default="{ row }">{{ getCurrencySymbol(row.marketType) }}{{ formatMoney(row.currentPrice) }}</template>
+              </el-table-column>
+              <el-table-column prop="marketValue" :label="$t('group_page.market_value')" width="110">
+                <template #default="{ row }">¥{{ formatMoney(row.marketValue) }}</template>
+              </el-table-column>
+              <el-table-column prop="floatingProfit" :label="$t('group_page.floating_profit')" width="110">
+                <template #default="{ row }">
+                  <span :class="row.floatingProfit >= 0 ? 'profit' : 'loss'">
+                    {{ row.floatingProfit >= 0 ? '+' : '' }}¥{{ formatMoney(row.floatingProfit) }}
+                  </span>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div v-else style="text-align:center;padding:20px;color:#999">{{ $t('group_page.no_positions') }}</div>
+          </el-tab-pane>
+          <el-tab-pane :label="$t('group_page.option_position_tab')" name="option">
+            <el-table :data="memberDetail.optionPositions || []" stripe size="small" v-if="(memberDetail.optionPositions || []).length > 0">
+              <el-table-column prop="contractCode" :label="$t('options_page.contract_code')" width="130" />
+              <el-table-column prop="stockCode" :label="$t('group_page.stock_code')" width="70" />
+              <el-table-column :label="$t('group_page.market_type')" width="65">
+                <template #default="{ row }">{{ getMarketTypeLabel(row.marketType) }}</template>
+              </el-table-column>
+              <el-table-column :label="$t('options_page.option_type')" width="60">
+                <template #default="{ row }">
+                  <el-tag :type="row.optionType === 'call' ? 'success' : 'danger'" size="small">{{ row.optionType === 'call' ? 'C' : 'P' }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column :label="$t('options_page.strike_price')" width="80">
+                <template #default="{ row }">${{ formatMoney(row.strikePrice) }}</template>
+              </el-table-column>
+              <el-table-column :label="$t('options_page.expiration')" width="95">{{ row.expirationDate }}</el-table-column>
+              <el-table-column :label="$t('options_page.quantity')" prop="quantity" width="60" />
+              <el-table-column :label="$t('options_page.avg_cost')" width="75">
+                <template #default="{ row }">${{ formatMoney(row.avgCost) }}</template>
+              </el-table-column>
+              <el-table-column :label="$t('options_page.current_premium')" width="85">
+                <template #default="{ row }">${{ formatMoney(row.currentPremium) }}</template>
+              </el-table-column>
+              <el-table-column :label="$t('group_page.market_value')" width="100">
+                <template #default="{ row }">¥{{ formatMoney(row.marketValue) }}</template>
+              </el-table-column>
+              <el-table-column :label="$t('group_page.floating_profit')" width="100">
+                <template #default="{ row }">
+                  <span :class="row.profit >= 0 ? 'profit' : 'loss'">{{ row.profit >= 0 ? '+' : '' }}¥{{ formatMoney(row.profit) }}</span>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div v-else style="text-align:center;padding:20px;color:#999">{{ $t('options_page.no_positions') }}</div>
+          </el-tab-pane>
+        </el-tabs>
 
         <el-divider style="margin:12px 0" />
 
@@ -153,11 +189,11 @@
             <template #default="{ row }">{{ row.tradeType === 1 ? $t('trade_page.buy') : $t('trade_page.sell') }}</template>
           </el-table-column>
           <el-table-column prop="shares" :label="$t('group_page.shares')" width="80" />
-          <el-table-column prop="price" :label="$t('group_page.price')" width="100">
-            <template #default="{ row }">{{ formatMoney(row.price) || '-' }}</template>
+          <el-table-column :label="$t('group_page.price')" width="100">
+            <template #default="{ row }">{{ getCurrencySymbol(row.marketType) }}{{ formatMoney(row.price) || '-' }}</template>
           </el-table-column>
-          <el-table-column prop="amount" :label="$t('group_page.amount')" width="110">
-            <template #default="{ row }">{{ formatMoney(row.amount) || '-' }}</template>
+          <el-table-column :label="$t('group_page.amount')" width="110">
+            <template #default="{ row }">¥{{ formatMoney(row.amount) || '-' }}</template>
           </el-table-column>
           <el-table-column prop="tradeDate" :label="$t('group_page.date')" width="100" />
         </el-table>
@@ -204,11 +240,14 @@
           </div>
           <div v-if="!msg.stock_code" class="message-content">{{ msg.content }}</div>
 
-          <div v-if="msg.stock_code" class="message-stock-info">
+          <div v-if="msg.stock_code" class="message-stock-info" :class="{ 'option-msg': msg.message_type >= 5 }">
             <span>{{ getMessageTypeLabel(msg.message_type) }} {{ msg.stock_code }} {{ msg.stock_name }}</span>
             <span v-if="msg.market_type"> | {{ getMarketTypeLabel(msg.market_type) }}</span>
-            <span v-if="msg.price"> | {{ $t('group_page.unit_price') }} ¥{{ msg.price?.toFixed(2) }}</span>
+            <span v-if="msg.message_type >= 5 && msg.option_type"> | {{ msg.option_type === 'call' ? 'Call' : 'Put' }}</span>
+            <span v-if="msg.message_type >= 5 && msg.strike_price"> | {{ $t('options_page.strike_price') }} ${{ msg.strike_price?.toFixed(2) }}</span>
+            <span v-if="msg.message_type >= 5 && msg.expiration_date"> | {{ $t('options_page.expiration') }} {{ msg.expiration_date }}</span>
             <span v-if="msg.shares"> | {{ $t('group_page.shares') }}: {{ msg.shares }}</span>
+            <span v-if="msg.price"> | {{ msg.message_type >= 5 ? t('options_page.premium') : t('group_page.unit_price') }} ¥{{ msg.price?.toFixed(2) }}</span>
             <span v-if="msg.amount"> | = ¥{{ msg.amount?.toFixed(2) }}</span>
           </div>
 
@@ -309,6 +348,7 @@ const replyText = ref({})
 const replyInputRefs = {}
 
 const tradeDateRange = ref(null)
+const detailPosTab = ref('stock')
 
 /**
  * formatMoney
@@ -341,7 +381,7 @@ const formatTime = (dateStr) => {
  * @returns {string} The message type label
  */
 const getMessageTypeLabel = (type) => {
-  const labels = { 1: t('trade_page.buy'), 2: t('trade_page.sell'), 3: t('group_page.dividend'), 4: t('group_page.allotment') }
+  const labels = { 1: t('trade_page.buy'), 2: t('trade_page.sell'), 3: t('group_page.dividend'), 4: t('group_page.allotment'), 5: t('group_page.buy_to_open'), 6: t('group_page.sell_to_close'), 7: t('group_page.exercise'), 8: t('group_page.expiration_settlement') }
   return labels[type] || '-'
 }
 
@@ -352,7 +392,7 @@ const getMessageTypeLabel = (type) => {
  * @returns {string} The tag type (success/warning/primary/info)
  */
 const getMessageTagType = (type) => {
-  const types = { 1: 'success', 2: 'warning', 3: 'primary', 4: 'info' }
+  const types = { 1: 'success', 2: 'warning', 3: 'primary', 4: 'info', 5: 'warning', 6: 'danger', 7: 'primary', 8: 'info' }
   return types[type] || ''
 }
 
@@ -365,6 +405,11 @@ const getMessageTagType = (type) => {
 const getMarketTypeLabel = (type) => {
   const labels = { 1: 'A股', 2: '港股', 3: '美股' }
   return labels[type] || '-'
+}
+
+const getCurrencySymbol = (type) => {
+  const symbols = { 1: '¥', 2: 'HK$', 3: '$' }
+  return symbols[type] || ''
 }
 
 onMounted(async () => {
@@ -643,6 +688,9 @@ const handleReply = async (msg) => {
   color: var(--color-primary);
   margin-right: 2px;
 }
+
+.detail-pos-tabs { margin-top: -8px; }
+.detail-pos-tabs :deep(.el-tabs__header) { margin-bottom: 8px; border-bottom: none; }
 
 .replies-section {
   margin-top: 8px;

@@ -39,12 +39,12 @@
         <el-table-column :label="$t('fund_flow.change')" width="140">
           <template #default="{ row }">
             <span :class="row.changeAmount >= 0 ? 'profit' : 'loss'">
-              {{ row.changeAmount >= 0 ? '+' : '' }}{{ formatMoney(Math.abs(row.changeAmount)) }}
+              {{ row.changeAmount >= 0 ? '+' : '' }}¥{{ formatMoney(Math.abs(row.changeAmount)) }}
             </span>
           </template>
         </el-table-column>
         <el-table-column :label="$t('fund_flow.balance')" width="140">
-          <template #default="{ row }">{{ formatMoney(row.balanceAfter) }}</template>
+          <template #default="{ row }">¥{{ formatMoney(row.balanceAfter) }}</template>
         </el-table-column>
       </el-table>
 

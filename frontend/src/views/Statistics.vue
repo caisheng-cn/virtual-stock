@@ -11,7 +11,7 @@
           <div class="stat-card">
             <div class="stat-title">{{ $t('statistics_page.floating_profit') }}</div>
             <div class="stat-value" :class="stats.floatingProfit >= 0 ? 'profit' : 'loss'">
-              {{ stats.floatingProfit >= 0 ? '+' : '' }}{{ formatMoney(stats.floatingProfit) }}
+              {{ stats.floatingProfit >= 0 ? '+' : '' }}¥{{ formatMoney(stats.floatingProfit) }}
             </div>
           </div>
         </el-col>
@@ -27,7 +27,7 @@
           <div class="stat-card">
             <div class="stat-title">{{ $t('statistics_page.realized_profit') }}</div>
             <div class="stat-value" :class="stats.realizedProfit >= 0 ? 'profit' : 'loss'">
-              {{ stats.realizedProfit >= 0 ? '+' : '' }}{{ formatMoney(stats.realizedProfit) }}
+              {{ stats.realizedProfit >= 0 ? '+' : '' }}¥{{ formatMoney(stats.realizedProfit) }}
             </div>
           </div>
         </el-col>
@@ -65,7 +65,7 @@
           <el-col :xs="12" :sm="12" :md="6">
             <div class="stat-item">
               <span class="label">{{ $t('statistics_page.total_amount') + '：' }}</span>
-              <span class="value">{{ formatMoney(tradeStats.totalAmount) }}</span>
+              <span class="value">¥{{ formatMoney(tradeStats.totalAmount) }}</span>
             </div>
           </el-col>
         </el-row>
@@ -88,22 +88,22 @@
           </template>
         </el-table-column>
         <el-table-column prop="shares" :label="$t('statistics_page.shares')" width="80" />
-        <el-table-column prop="price" :label="$t('statistics_page.price')" width="100">
-          <template #default="{ row }">{{ formatMoney(row.price) || '-' }}</template>
+        <el-table-column :label="$t('statistics_page.price')" width="110">
+          <template #default="{ row }">{{ getCurrencySymbol(row.marketType) }}{{ formatMoney(row.price) || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="amount" :label="$t('statistics_page.amount')" width="120">
-          <template #default="{ row }">{{ formatMoney(row.amount) || '-' }} RMB</template>
+        <el-table-column :label="$t('statistics_page.amount')" width="120">
+          <template #default="{ row }">¥{{ formatMoney(row.amountCNY ?? row.amount) || '-' }}</template>
         </el-table-column>
         <el-table-column :label="$t('statistics_page.profit')" width="100">
           <template #default="{ row }">
             <span v-if="row.tradeType === 2 && row.profit !== undefined && row.profit !== null" :class="row.profit >= 0 ? 'profit' : 'loss'">
-              {{ row.profit >= 0 ? '+' : '' }}{{ formatMoney(row.profit) }}
+              {{ row.profit >= 0 ? '+' : '' }}¥{{ formatMoney(row.profit) }}
             </span>
             <span v-else-if="row.tradeType === 1" class="commission-text">
-              -{{ formatMoney(row.commission) }}
+              -¥{{ formatMoney(row.commission) }}
             </span>
             <span v-else-if="row.tradeType === 3" :class="row.amount >= 0 ? 'profit' : 'loss'">
-              +{{ formatMoney(row.amount) }}
+              +¥{{ formatMoney(row.amount) }}
             </span>
             <span v-else>-</span>
           </template>
@@ -144,6 +144,11 @@ const transactions = ref([])
 const formatMoney = (value) => {
   if (!value && value !== 0) return '0.00'
   return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+const getCurrencySymbol = (type) => {
+  const symbols = { 1: '¥', 2: 'HK$', 3: '$' }
+  return symbols[type] || ''
 }
 
 const getTradeTypeLabel = (type) => {

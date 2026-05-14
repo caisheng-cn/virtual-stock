@@ -23,5 +23,6 @@ router.use('/statistics', require('./statistics'))
 router.use('/admin', require('./admin'))
 router.use('/about', require('./about'))
 router.use('/messages', require('./messages'))
+router.use('/options', require('./options'))
 
 module.exports = router

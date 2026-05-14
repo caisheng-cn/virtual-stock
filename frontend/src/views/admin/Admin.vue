@@ -39,6 +39,9 @@
           <el-menu-item index="commission">
             <span>{{ $t('admin.commission_settings') }}</span>
           </el-menu-item>
+          <el-menu-item index="options">
+            <span>{{ $t('admin.option_management') }}</span>
+          </el-menu-item>
           <el-menu-item index="about">
             <span>{{ $t('admin.about') }}</span>
           </el-menu-item>
@@ -128,7 +131,7 @@
                   <span class="rank-badge" :class="'rank-' + (i+1)">{{ i + 1 }}</span>
                   <span class="rank-name">{{ g.group_name }}</span>
                   <span class="rank-value" :class="g.profit >= 0 ? 'profit' : 'loss'">
-                    {{ g.profit >= 0 ? '+' : '' }}{{ formatMoney(g.profit) }}
+                      {{ g.profit >= 0 ? '+' : '' }}¥{{ formatMoney(g.profit) }}
                   </span>
                   <span class="rank-rate" :class="g.profit_rate >= 0 ? 'profit' : 'loss'">
                     {{ g.profit_rate >= 0 ? '+' : '' }}{{ g.profit_rate }}%
@@ -182,7 +185,7 @@
               <el-table-column prop="name" :label="$t('admin.name')" />
               <el-table-column prop="description" :label="$t('admin.description')" />
               <el-table-column prop="init_cash" :label="$t('admin.init_funds')" width="120">
-                <template #default="{ row }">{{ row.init_cash || '-' }}</template>
+                <template #default="{ row }">¥{{ row.init_cash || '-' }}</template>
               </el-table-column>
               <el-table-column prop="status" :label="$t('admin.status')" width="80">
                 <template #default="{ row }">{{ row.status === 1 ? $t('common.normal') : $t('common.disabled') }}</template>
@@ -488,19 +491,19 @@
             <el-table :data="groupStats" stripe>
               <el-table-column prop="rank" :label="$t('group_page.rank')" width="60" />
               <el-table-column prop="group_name" :label="$t('admin.name')" />
-              <el-table-column prop="init_cash" :label="$t('admin.init_funds')" width="120">
-                <template #default="{ row }">{{ formatMoney(row.init_cash) }}</template>
-              </el-table-column>
-              <el-table-column prop="total_assets" :label="$t('nav.total_assets')" width="120">
-                <template #default="{ row }">{{ formatMoney(row.total_assets) }}</template>
-              </el-table-column>
-              <el-table-column prop="profit" :label="$t('group_page.profit')" width="120">
-                <template #default="{ row }">
-                  <span :class="{ 'profit-positive': parseFloat(row.profit) > 0, 'profit-negative': parseFloat(row.profit) < 0 }">
-                    {{ formatMoney(row.profit) }}
-                  </span>
-                </template>
-              </el-table-column>
+                <el-table-column prop="init_cash" :label="$t('admin.init_funds')" width="120">
+                  <template #default="{ row }">¥{{ formatMoney(row.init_cash) }}</template>
+                </el-table-column>
+                <el-table-column prop="total_assets" :label="$t('nav.total_assets')" width="120">
+                  <template #default="{ row }">¥{{ formatMoney(row.total_assets) }}</template>
+                </el-table-column>
+                <el-table-column prop="profit" :label="$t('group_page.profit')" width="120">
+                  <template #default="{ row }">
+                    <span :class="{ 'profit-positive': parseFloat(row.profit) > 0, 'profit-negative': parseFloat(row.profit) < 0 }">
+                      ¥{{ formatMoney(row.profit) }}
+                    </span>
+                  </template>
+                </el-table-column>
               <el-table-column prop="profit_rate" :label="$t('group_page.profit_rate')" width="100">
                 <template #default="{ row }">{{ row.profit_rate }}%</template>
               </el-table-column>
@@ -515,10 +518,107 @@
               <el-table-column prop="username" :label="$t('auth.username')" />
               <el-table-column prop="trade_count" :label="$t('admin.trade_count')" width="100" />
               <el-table-column prop="login_count" :label="$t('admin.login_count')" width="100" />
-              <el-table-column prop="total_profit" :label="$t('admin.total_profit')" width="120">
-                <template #default="{ row }">{{ formatMoney(row.total_profit) }}</template>
+                <el-table-column prop="total_profit" :label="$t('admin.total_profit')" width="120">
+                  <template #default="{ row }">¥{{ formatMoney(row.total_profit) }}</template>
+                </el-table-column>
+            </el-table>
+          </el-card>
+        </div>
+
+        <div v-if="activeMenu === 'options'" class="options-admin">
+          <el-card style="margin-bottom:16px">
+            <template #header>
+              <div class="card-header">
+                <span>{{ $t('admin.whitelist') }}</span>
+                <el-button type="primary" size="small" @click="showWhitelistDialog = true">{{ $t('admin.add_whitelist') }}</el-button>
+              </div>
+            </template>
+            <el-table :data="whitelistItems" stripe v-loading="whitelistLoading">
+              <el-table-column prop="id" label="ID" width="60" />
+              <el-table-column prop="stock_code" :label="$t('admin.stock_code')" width="100" />
+              <el-table-column prop="stock_name" :label="$t('admin.stock_name')" />
+              <el-table-column :label="$t('admin.market')" width="80">
+                <template #default="{ row }">{{ getMarketLabel(row.market_type) }}</template>
+              </el-table-column>
+              <el-table-column :label="$t('admin.status')" width="80">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
+                    {{ row.status === 1 ? $t('common.normal') : $t('common.disabled') }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column :label="$t('common.operation')" width="180">
+                <template #default="{ row }">
+                  <el-button size="small" :type="row.status === 1 ? 'warning' : 'success'"
+                    @click="toggleWhitelistStatus(row)">
+                    {{ row.status === 1 ? $t('common.disabled') : $t('common.normal') }}
+                  </el-button>
+                  <el-button size="small" type="danger" @click="deleteWhitelist(row)">{{ $t('common.delete') }}</el-button>
+                </template>
               </el-table-column>
             </el-table>
+          </el-card>
+
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>{{ $t('admin.contract_management') }}</span>
+                <el-button type="success" size="small" @click="showGenerateDialog = true" :loading="generating">
+                  {{ $t('admin.generate_contracts') }}
+                </el-button>
+              </div>
+            </template>
+            <div style="margin-bottom:8px;color:#999;font-size:13px">
+              共 {{ contractTotal }} 条合约，当前显示 {{ contractItems.length }} 条
+              <span v-if="contractLoading">（加载中...）</span>
+            </div>
+            <div v-if="contractItems.length === 0 && !contractLoading" style="padding:40px;text-align:center;color:#999">
+              暂无合约数据，请先生成合约
+            </div>
+            <div v-if="contractItems.length > 0" class="contract-list">
+              <div v-for="item in contractItems.slice(0, 5)" :key="item.id"
+                style="padding:6px 10px;border-bottom:1px solid #eee;font-size:13px">
+                <el-tag :type="item.option_type === 'call' ? 'success' : 'danger'" size="small" style="margin-right:8px">
+                  {{ item.option_type === 'call' ? 'Call' : 'Put' }}
+                </el-tag>
+                <strong>{{ item.contract_code }}</strong>
+                <span style="color:#999;margin-left:8px">${{ formatMoney(item.strike_price) }}</span>
+                <span style="color:#999;margin-left:8px">{{ item.expiration_date }}</span>
+              </div>
+            </div>
+            <el-table v-if="contractItems.length > 0" :data="contractItems" stripe v-loading="contractLoading" style="margin-top:10px">
+              <el-table-column prop="id" label="ID" width="60" />
+              <el-table-column prop="contract_code" label="合约代码" width="180" />
+              <el-table-column prop="stock_code" label="代码" width="80" />
+              <el-table-column prop="stock_name" label="名称" />
+              <el-table-column :label="$t('options_page.option_type')" width="70">
+                <template #default="{ row }">
+                  <el-tag :type="row.option_type === 'call' ? 'success' : 'danger'" size="small">
+                    {{ row.option_type === 'call' ? 'Call' : 'Put' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column :label="$t('options_page.strike_price')" width="100">
+                <template #default="{ row }">${{ formatMoney(row.strike_price) }}</template>
+              </el-table-column>
+              <el-table-column :label="$t('options_page.expiration')" width="110">{{ row.expiration_date }}</el-table-column>
+              <el-table-column :label="$t('admin.status')" width="80">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
+                    {{ row.status === 1 ? '交易中' : '已到期' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="生成时标的价" width="110">
+                <template #default="{ row }">${{ formatMoney(row.underlying_price) }}</template>
+              </el-table-column>
+            </el-table>
+            <div style="margin-top:12px;text-align:center">
+              <el-pagination v-if="contractTotal > 0" background
+                :total="contractTotal" :page-size="contractPageSize"
+                :current-page="contractPage" layout="prev, pager, next"
+                @current-change="fetchContracts" />
+            </div>
           </el-card>
         </div>
 
@@ -552,6 +652,50 @@
       </el-main>
     </el-container>
 
+    <el-dialog v-model="showWhitelistDialog" title="添加期权白名单" width="500px">
+      <el-form label-width="80px">
+        <el-form-item label="股票">
+          <el-select
+            v-model="whitelistStock"
+            filterable
+            remote
+            :remote-method="searchWhitelistStocks"
+            :loading="whitelistSearchLoading"
+            style="width:100%"
+            value-key="stock_code"
+            placeholder="输入股票代码或名称搜索"
+          >
+            <el-option v-for="s in whitelistSearchResults" :key="s.stock_code"
+              :label="s.stock_code + ' ' + s.stock_name"
+              :value="s" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showWhitelistDialog = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="addWhitelist" :loading="whitelistSaving">{{ $t('common.confirm') }}</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showGenerateDialog" title="生成期权合约" width="500px">
+      <el-form label-width="80px">
+        <el-form-item label="标的">
+          <el-select v-model="generateStockId" filterable style="width:100%" placeholder="请选择标的">
+            <el-option v-for="w in whitelistItems" :key="w.id"
+              :label="w.stock_code + ' ' + w.stock_name"
+              :value="w.id" />
+          </el-select>
+        </el-form-item>
+        <div style="color:#999;font-size:13px;padding-left:80px;margin-top:10px">
+          系统会自动为所选标的生成11个行权价 × 5个到期日 × 2种类型 = 110条合约
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="showGenerateDialog = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="generateContracts" :loading="generating">{{ $t('common.confirm') }}</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="showGroupDialog" :title="editingGroupId ? $t('admin.edit_group') : $t('admin.create_group')">
       <el-form :model="groupForm">
         <el-form-item :label="$t('admin.name')">
@@ -584,7 +728,7 @@
         <el-table-column prop="username" :label="$t('auth.username')" width="100" />
         <el-table-column prop="nickname" :label="$t('admin.nickname')" width="100" />
         <el-table-column prop="cash" :label="$t('admin.init_funds')" width="100">
-          <template #default="{ row }">{{ Number(row.cash).toFixed(2) }}</template>
+          <template #default="{ row }">¥{{ Number(row.cash).toFixed(2) }}</template>
         </el-table-column>
         <el-table-column prop="total_assets" :label="$t('nav.market_value')" width="100">
           <template #default="{ row }">{{ row.total_assets }}</template>
@@ -592,7 +736,7 @@
         <el-table-column prop="positions_shares" :label="$t('positions_page.shares')" width="90" />
         <el-table-column prop="profit" :label="$t('group_page.profit')" width="100">
           <template #default="{ row }">
-            <span :class="Number(row.profit) >= 0 ? 'profit-text' : 'loss-text'">{{ row.profit }}</span>
+            <span :class="Number(row.profit) >= 0 ? 'profit-text' : 'loss-text'">¥{{ row.profit }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="profit_rate" :label="$t('group_page.profit_rate')" width="80">
@@ -799,16 +943,16 @@
 
         <el-tab-pane :label="$t('admin.balance_info')" name="balance">
           <el-descriptions :column="3" border>
-            <el-descriptions-item :label="$t('transactions_page.account_balance')">{{ formatMoney(userDetailData.balance?.cash) }}</el-descriptions-item>
-            <el-descriptions-item :label="$t('positions_page.cost_price')">{{ formatMoney(userDetailData.balance?.total_cost) }}</el-descriptions-item>
-            <el-descriptions-item :label="$t('admin.init_funds')">{{ formatMoney(userDetailData.balance?.init_cash) }}</el-descriptions-item>
-            <el-descriptions-item :label="$t('nav.market_value')">{{ formatMoney(userDetailData.positions_value) }}</el-descriptions-item>
+            <el-descriptions-item :label="$t('transactions_page.account_balance')">¥{{ formatMoney(userDetailData.balance?.cash) }}</el-descriptions-item>
+            <el-descriptions-item :label="$t('positions_page.cost_price')">¥{{ formatMoney(userDetailData.balance?.total_cost) }}</el-descriptions-item>
+            <el-descriptions-item :label="$t('admin.init_funds')">¥{{ formatMoney(userDetailData.balance?.init_cash) }}</el-descriptions-item>
+            <el-descriptions-item :label="$t('nav.market_value')">¥{{ formatMoney(userDetailData.positions_value) }}</el-descriptions-item>
             <el-descriptions-item :label="$t('positions_page.floating_profit')">
               <span :class="{ 'profit-positive': parseFloat(userDetailData.floating_profit) > 0, 'profit-negative': parseFloat(userDetailData.floating_profit) < 0 }">
-                {{ formatMoney(userDetailData.floating_profit) }}
+                ¥{{ formatMoney(userDetailData.floating_profit) }}
               </span>
             </el-descriptions-item>
-            <el-descriptions-item :label="$t('statistics_page.realized_profit')">{{ formatMoney(userDetailData.realized_profit) }}</el-descriptions-item>
+            <el-descriptions-item :label="$t('statistics_page.realized_profit')">¥{{ formatMoney(userDetailData.realized_profit) }}</el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
 
@@ -817,18 +961,18 @@
             <el-table-column prop="stock_code" :label="$t('admin.code')" width="100" />
             <el-table-column prop="shares" :label="$t('positions_page.shares')" width="80" />
             <el-table-column prop="avg_cost" :label="$t('positions_page.cost_price')" width="80">
-              <template #default="{ row }">{{ formatMoney(row.avg_cost) }}</template>
+              <template #default="{ row }">¥{{ formatMoney(row.avg_cost) }}</template>
             </el-table-column>
             <el-table-column prop="current_price" :label="$t('trade_page.current_price')" width="80">
-              <template #default="{ row }">{{ formatMoney(row.current_price) }}</template>
+              <template #default="{ row }">¥{{ formatMoney(row.current_price) }}</template>
             </el-table-column>
             <el-table-column prop="value" :label="$t('nav.market_value')" width="100">
-              <template #default="{ row }">{{ formatMoney(row.value) }}</template>
+              <template #default="{ row }">¥{{ formatMoney(row.value) }}</template>
             </el-table-column>
             <el-table-column prop="profit" :label="$t('positions_page.floating_profit')" width="100">
               <template #default="{ row }">
                 <span :class="{ 'profit-positive': parseFloat(row.profit) > 0, 'profit-negative': parseFloat(row.profit) < 0 }">
-                  {{ formatMoney(row.profit) }}
+                  ¥{{ formatMoney(row.profit) }}
                 </span>
               </template>
             </el-table-column>
@@ -852,18 +996,18 @@
             </el-table-column>
             <el-table-column prop="shares" :label="$t('positions_page.shares')" width="80" />
             <el-table-column prop="price" :label="$t('group_page.price')" width="80">
-              <template #default="{ row }">{{ formatMoney(row.price) }}</template>
+              <template #default="{ row }">¥{{ formatMoney(row.price) }}</template>
             </el-table-column>
             <el-table-column prop="amount" :label="$t('statistics_page.amount')" width="100">
-              <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
+              <template #default="{ row }">¥{{ formatMoney(row.amount) }}</template>
             </el-table-column>
             <el-table-column prop="commission" :label="$t('transactions_page.commission')" width="80">
-              <template #default="{ row }">{{ formatMoney(row.commission) }}</template>
+              <template #default="{ row }">¥{{ formatMoney(row.commission) }}</template>
             </el-table-column>
             <el-table-column prop="profit" :label="$t('group_page.profit')" width="80">
               <template #default="{ row }">
                 <span v-if="row.profit" :class="{ 'profit-positive': parseFloat(row.profit) > 0, 'profit-negative': parseFloat(row.profit) < 0 }">
-                  {{ formatMoney(row.profit) }}
+                  ¥{{ formatMoney(row.profit) }}
                 </span>
                 <span v-else>-</span>
               </template>
@@ -896,12 +1040,12 @@
             <el-table-column :label="$t('fund_flow.change')" width="120">
               <template #default="{ row }">
                 <span :class="row.changeAmount >= 0 ? 'profit-positive' : 'profit-negative'">
-                  {{ row.changeAmount >= 0 ? '+' : '' }}{{ formatMoney(Math.abs(row.changeAmount)) }}
+                    {{ row.changeAmount >= 0 ? '+' : '' }}¥{{ formatMoney(Math.abs(row.changeAmount)) }}
                 </span>
               </template>
             </el-table-column>
             <el-table-column :label="$t('fund_flow.balance')" width="120">
-              <template #default="{ row }">{{ formatMoney(row.balanceAfter) }}</template>
+              <template #default="{ row }">¥{{ formatMoney(row.balanceAfter) }}</template>
             </el-table-column>
           </el-table>
         </el-tab-pane>
@@ -931,18 +1075,18 @@
         </el-table-column>
         <el-table-column prop="shares" :label="$t('positions_page.shares')" width="80" />
         <el-table-column prop="price" :label="$t('group_page.price')" width="80">
-          <template #default="{ row }">{{ formatMoney(row.price) }}</template>
+          <template #default="{ row }">¥{{ formatMoney(row.price) }}</template>
         </el-table-column>
         <el-table-column prop="amount" :label="$t('statistics_page.amount')" width="100">
-          <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
+          <template #default="{ row }">¥{{ formatMoney(row.amount) }}</template>
         </el-table-column>
         <el-table-column prop="commission" :label="$t('transactions_page.commission')" width="80">
-          <template #default="{ row }">{{ formatMoney(row.commission) }}</template>
+          <template #default="{ row }">¥{{ formatMoney(row.commission) }}</template>
         </el-table-column>
         <el-table-column prop="profit" :label="$t('group_page.profit')" width="80">
           <template #default="{ row }">
             <span v-if="row.profit" :class="{ 'profit-positive': parseFloat(row.profit) > 0, 'profit-negative': parseFloat(row.profit) < 0 }">
-              {{ formatMoney(row.profit) }}
+              ¥{{ formatMoney(row.profit) }}
             </span>
             <span v-else>-</span>
           </template>
@@ -1001,12 +1145,12 @@
  * Version History:
  *   - 2024-01-01: Initial version
  */
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { i18n } from '@/i18n'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getStats, getGroups, createGroup as createGroupAPI, deleteGroup as deleteGroupAPI, getUsers, toggleUserStatus as toggleUserStatusAPI, deleteUser as deleteUserAPI, getStocks, getStockPositions, createStock as createStockAPI, deleteStock as deleteStockAPI, getInviteCodes, createInviteCode, getCommissionConfigs, updateCommissionConfig, getCommissionHistory, getMarketConfig, updateMarketConfig, getMissingStocks, getGroupStatistics, getUserStatistics, getUserDetail, getUserLoginHistory, getUserTransactions, setTradeEnabled, setAdminAccess, getGroupUsers as getGroupUsersAPI, addGroupUser as addGroupUserAPI, removeGroupUser as removeGroupUserAPI, payDividend, doAllotment, getUserFundFlow, startStockSync, getStockSyncProgress, getStockSyncHistory, getStockSyncDetail, cancelStockSync } from '@/api/admin'
+import { getStats, getGroups, createGroup as createGroupAPI, deleteGroup as deleteGroupAPI, getUsers, toggleUserStatus as toggleUserStatusAPI, deleteUser as deleteUserAPI, getStocks, getStockPositions, createStock as createStockAPI, deleteStock as deleteStockAPI, getInviteCodes, createInviteCode, getCommissionConfigs, updateCommissionConfig, getCommissionHistory, getMarketConfig, updateMarketConfig, getMissingStocks, getGroupStatistics, getUserStatistics, getUserDetail, getUserLoginHistory, getUserTransactions, setTradeEnabled, setAdminAccess, getGroupUsers as getGroupUsersAPI, addGroupUser as addGroupUserAPI, removeGroupUser as removeGroupUserAPI, payDividend, doAllotment, getUserFundFlow, startStockSync, getStockSyncProgress, getStockSyncHistory, getStockSyncDetail, cancelStockSync, getOptionWhitelist, addOptionWhitelist, deleteOptionWhitelist, toggleOptionWhitelistStatus, getOptionContracts, generateOptionContracts } from '@/api/admin'
 import { getVersion } from '@/api/about'
 
 const router = useRouter()
@@ -1064,6 +1208,23 @@ const showUserDetailDialog = ref(false)
 const showUserLoginHistoryDialog = ref(false)
 const showUserTransactionsDialog = ref(false)
 
+const showWhitelistDialog = ref(false)
+const showGenerateDialog = ref(false)
+const whitelistItems = ref([])
+const whitelistLoading = ref(false)
+const whitelistSaving = ref(false)
+const whitelistSearchLoading = ref(false)
+const whitelistSearchResults = ref([])
+const whitelistStock = ref(null)
+const whitelistForm = reactive({ stock_code: '', stock_name: '', market_type: 3 })
+const contractItems = ref([])
+const contractLoading = ref(false)
+const contractTotal = ref(0)
+const contractPage = ref(1)
+const contractPageSize = ref(20)
+const generating = ref(false)
+const generateStockId = ref(null)
+
 const editingGroupId = ref(null)
 const groupForm = reactive({ name: '', description: '', init_cash: 100000 })
 const stockForm = reactive({ stock_code: '', stock_name: '', market_type: 1 })
@@ -1108,6 +1269,13 @@ const syncPercentage = computed(() => {
 
 onMounted(() => {
   fetchData()
+})
+
+watch(activeMenu, (val) => {
+  if (val === 'options') {
+    fetchWhitelist()
+    fetchContracts(1)
+  }
 })
 
 onUnmounted(() => {
@@ -1401,6 +1569,10 @@ const handleMenuSelect = (index) => {
   activeMenu.value = index
   if (index === 'about') {
     loadAbout()
+  }
+  if (index === 'options') {
+    fetchWhitelist()
+    fetchContracts(1)
   }
   if (index === 'market-config') {
     loadSyncHistory()
@@ -1945,6 +2117,124 @@ const handleLogout = () => {
   localStorage.removeItem('adminToken')
   localStorage.removeItem('adminId')
   router.push('/admin-login')
+}
+
+// ===== 期权管理 =====
+
+const fetchWhitelist = async () => {
+  whitelistLoading.value = true
+  try {
+    const res = await getOptionWhitelist({ page: 1, pageSize: 100 })
+    whitelistItems.value = res.data?.list || []
+  } catch (e) {
+    ElMessage.error(e.message || t('admin.operate_failed'))
+  }
+  whitelistLoading.value = false
+}
+
+const searchWhitelistStocks = async (query) => {
+  if (!query || !query.trim()) {
+    whitelistSearchResults.value = []
+    return
+  }
+  whitelistSearchLoading.value = true
+  try {
+    const res = await getStocks({ keyword: query.trim(), page: 1, pageSize: 20 })
+    whitelistSearchResults.value = res.data?.list || []
+  } catch (e) {
+    whitelistSearchResults.value = []
+  }
+  whitelistSearchLoading.value = false
+}
+
+const addWhitelist = async () => {
+  if (!whitelistStock.value) return ElMessage.warning(t('admin.select_stock'))
+  whitelistSaving.value = true
+  try {
+    const stock = whitelistStock.value
+    const res = await addOptionWhitelist({
+      stock_code: stock.stock_code,
+      market_type: stock.market_type || 3,
+      stock_name: stock.stock_name
+    })
+    if (res.code === 0) {
+      ElMessage.success(t('common.success'))
+      showWhitelistDialog.value = false
+      whitelistStock.value = null
+      whitelistSearchResults.value = []
+      fetchWhitelist()
+    }
+  } catch (e) {
+    ElMessage.error(e.message || t('admin.operate_failed'))
+  }
+  whitelistSaving.value = false
+}
+
+const toggleWhitelistStatus = async (row) => {
+  try {
+    const res = await toggleOptionWhitelistStatus(row.id, row.status === 1 ? 0 : 1)
+    if (res.code === 0) {
+      ElMessage.success(t('common.success'))
+      fetchWhitelist()
+    }
+  } catch (e) {
+    ElMessage.error(e.message || t('admin.operate_failed'))
+  }
+}
+
+const deleteWhitelist = async (row) => {
+  try {
+    await ElMessageBox.confirm(t('admin.confirm_delete'), t('common.confirm'), { type: 'warning' })
+  } catch { return }
+  try {
+    const res = await deleteOptionWhitelist(row.id)
+    if (res.code === 0) {
+      ElMessage.success(t('common.success'))
+      fetchWhitelist()
+    }
+  } catch (e) {
+    ElMessage.error(e.message || t('admin.operate_failed'))
+  }
+}
+
+const fetchContracts = async (page) => {
+  contractPage.value = page || 1
+  contractLoading.value = true
+  try {
+    const res = await getOptionContracts({ page: contractPage.value, pageSize: contractPageSize.value })
+    console.log('fetchContracts response:', res)
+    if (res && res.data && Array.isArray(res.data.list)) {
+      contractItems.value = res.data.list
+      contractTotal.value = res.data.total || 0
+    } else {
+      console.warn('fetchContracts unexpected format:', res)
+      contractItems.value = []
+      contractTotal.value = 0
+    }
+  } catch (e) {
+    console.error('fetchContracts error:', e)
+    ElMessage.error(e.message || t('admin.operate_failed'))
+  }
+  contractLoading.value = false
+}
+
+const generateContracts = async () => {
+  if (!generateStockId.value) return ElMessage.warning(t('admin.select_stock'))
+  const stock = whitelistItems.value.find(w => w.id === generateStockId.value)
+  if (!stock) return
+  generating.value = true
+  try {
+    const res = await generateOptionContracts({ stock_code: stock.stock_code, market_type: stock.market_type })
+    if (res.code === 0) {
+      ElMessage.success(t('common.success'))
+      showGenerateDialog.value = false
+      generateStockId.value = null
+      fetchContracts(1)
+    }
+  } catch (e) {
+    ElMessage.error(e.message || t('admin.operate_failed'))
+  }
+  generating.value = false
 }
 </script>
 

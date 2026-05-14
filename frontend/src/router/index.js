@@ -79,6 +79,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/options',
+    name: 'Options',
+    component: () => import('../views/Options.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/admin',
     name: 'Admin',
     component: () => import('../views/admin/Admin.vue'),
@@ -113,7 +119,7 @@ router.afterEach((to, from) => {
   }
   
   // Clear regular user token when leaving authenticated routes
-  const authRoutes = ['/home', '/trade', '/positions', '/statistics', '/transactions', '/group', '/fund-flow']
+  const authRoutes = ['/home', '/trade', '/positions', '/statistics', '/transactions', '/group', '/fund-flow', '/options']
   if (authRoutes.includes(from.path) && !authRoutes.includes(to.path) && to.path !== '/login' && to.path !== '/register') {
     localStorage.removeItem('token')
   }

@@ -10,14 +10,19 @@ function getSinaPrefix(code) {
   return code.startsWith('6') ? 'sh' : 'sz'
 }
 
-function runPythonScript(scriptPath, args) {
+function runPythonScript(scriptPath, args, timeout = 90000) {
   return new Promise((resolve, reject) => {
     const proc = spawn('python3', [scriptPath, JSON.stringify(args)])
     let output = ''
     let errorOutput = ''
+    const timer = setTimeout(() => {
+      proc.kill('SIGTERM')
+      reject(new Error(`Python script timed out after ${timeout / 1000}s`))
+    }, timeout)
     proc.stdout.on('data', data => { output += data.toString() })
     proc.stderr.on('data', data => { errorOutput += data.toString() })
     proc.on('close', code => {
+      clearTimeout(timer)
       if (code !== 0) {
         reject(new Error(`Python error: ${errorOutput}`))
       } else {

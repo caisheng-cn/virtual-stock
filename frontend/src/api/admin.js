@@ -309,3 +309,10 @@ export const getStockSyncProgress = (id) => request.get(`/admin/stocks/sync/prog
 export const getStockSyncHistory = (params) => request.get('/admin/stocks/sync/history', { params })
 export const getStockSyncDetail = (id) => request.get(`/admin/stocks/sync/history/${id}`)
 export const cancelStockSync = (id) => request.post(`/admin/stocks/sync/cancel/${id}`)
+
+export const getOptionWhitelist = (params) => request.get('/admin/options/whitelist', { params })
+export const addOptionWhitelist = (data) => request.post('/admin/options/whitelist', data)
+export const deleteOptionWhitelist = (id) => request.delete(`/admin/options/whitelist/${id}`)
+export const toggleOptionWhitelistStatus = (id, status) => request.put(`/admin/options/whitelist/${id}/status`, { status })
+export const getOptionContracts = (params) => request.get('/admin/options/contracts', { params })
+export const generateOptionContracts = (data) => request.post('/admin/options/contracts/generate', data)

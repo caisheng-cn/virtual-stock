@@ -13,7 +13,9 @@
 const express = require('express')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
-const { sequelize, AdminUser, Group, User, UserGroup, UserBalance, Position, Transaction, StockPool, StockPricesCache, InviteCode, CommissionConfig, LoginHistory, MarketConfig, CommissionHistory, GroupMessage, StockSyncRecord } = require('../models')
+const { sequelize, AdminUser, Group, User, UserGroup, UserBalance, Position, Transaction, StockPool, StockPricesCache, InviteCode, CommissionConfig, LoginHistory, MarketConfig, CommissionHistory, GroupMessage, StockSyncRecord, OptionWhitelist, OptionContract } = require('../models')
+const optionService = require('../services/option')
+const { toCNY } = require('../utils/currency')
 const { pinyin } = require('pinyin-pro')
 const { Op } = require('sequelize')
 const commissionService = require('../services/commission')
@@ -1433,6 +1435,184 @@ router.post('/stocks/sync/cancel/:id', async (req, res) => {
     stockSync.setCancelled(record.id)
 
     res.json({ code: 0, message: '已取消同步任务' })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+// ============================================
+// 期权管理
+// ============================================
+
+/**
+ * GET /api/v1/admin/options/whitelist - Option whitelist list
+ */
+router.get('/options/whitelist', async (req, res) => {
+  try {
+    const { page = 1, pageSize = 20 } = req.query
+    const offset = (parseInt(page) - 1) * parseInt(pageSize)
+    const { rows, count } = await OptionWhitelist.findAndCountAll({
+      order: [['id', 'DESC']],
+      offset,
+      limit: parseInt(pageSize),
+      raw: true
+    })
+    res.json({ code: 0, data: { list: rows, total: count, page: parseInt(page), pageSize: parseInt(pageSize) } })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/options/whitelist - Add stock to whitelist
+ */
+router.post('/options/whitelist', async (req, res) => {
+  try {
+    const { stock_code, market_type, stock_name } = req.body
+    if (!stock_code || !market_type) {
+      return res.json({ code: -1, message: '参数不完整' })
+    }
+    const [record, created] = await OptionWhitelist.findOrCreate({
+      where: { stock_code, market_type: parseInt(market_type) },
+      defaults: { stock_code, market_type: parseInt(market_type), stock_name: stock_name || stock_code }
+    })
+    res.json({ code: 0, data: record })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * DELETE /api/v1/admin/options/whitelist/:id - Remove from whitelist
+ */
+router.delete('/options/whitelist/:id', async (req, res) => {
+  try {
+    await OptionWhitelist.destroy({ where: { id: req.params.id } })
+    res.json({ code: 0, message: '已移除' })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * PUT /api/v1/admin/options/whitelist/:id/status - Toggle whitelist status
+ */
+router.put('/options/whitelist/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body
+    await OptionWhitelist.update({ status: parseInt(status) }, { where: { id: req.params.id } })
+    res.json({ code: 0, message: '状态已更新' })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * GET /api/v1/admin/options/contracts - List all option contracts
+ */
+router.get('/options/contracts', async (req, res) => {
+  try {
+    const { page = 1, pageSize = 20, status, stock_code } = req.query
+    const where = {}
+    if (status) where.status = parseInt(status)
+    if (stock_code) where.stock_code = stock_code
+    const offset = (parseInt(page) - 1) * parseInt(pageSize)
+    const { rows, count } = await OptionContract.findAndCountAll({
+      where,
+      order: [['expiration_date', 'ASC'], ['strike_price', 'ASC']],
+      offset,
+      limit: parseInt(pageSize),
+      raw: true
+    })
+    res.json({ code: 0, data: { list: rows, total: count, page: parseInt(page), pageSize: parseInt(pageSize) } })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/options/contracts/generate - Generate contracts for a stock
+ */
+router.post('/options/contracts/generate', async (req, res) => {
+  try {
+    const { stock_code, market_type } = req.body
+    if (!stock_code || !market_type) {
+      return res.json({ code: -1, message: '参数不完整' })
+    }
+    const whitelist = await OptionWhitelist.findOne({ where: { stock_code, market_type: parseInt(market_type) } })
+    if (!whitelist) return res.json({ code: -1, message: '该股票不在白名单中' })
+    const underlyingPrice = await optionService.getUnderlyingPrice(stock_code, parseInt(market_type))
+    if (!underlyingPrice) return res.json({ code: -1, message: '无法获取标的股价' })
+    await optionService.ensureContracts(stock_code, parseInt(market_type), whitelist.stock_name, underlyingPrice)
+    await optionService.refreshPrices(stock_code, parseInt(market_type))
+    res.json({ code: 0, message: '合约生成成功' })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/options/settlement - Manual settlement for expired contracts
+ */
+router.post('/options/settlement', async (req, res) => {
+  try {
+    const { expiration_date } = req.body
+    if (!expiration_date) return res.json({ code: -1, message: '缺少到期日参数' })
+    const expiredContracts = await OptionContract.findAll({
+      where: { expiration_date, status: 1 },
+      raw: true
+    })
+    let settled = 0
+    for (const contract of expiredContracts) {
+      const positions = await OptionPosition.findAll({
+        where: { contract_id: contract.id, status: 1 }
+      })
+      if (!positions.length) continue
+      const priceRow = await OptionPrice.findOne({
+        where: { contract_id: contract.id, trade_date: expiration_date },
+        raw: true
+      })
+      const underlyingPrice = priceRow ? parseFloat(priceRow.underlying_price) : 0
+      const strike = parseFloat(contract.strike_price)
+      const multiplier = contract.contract_multiplier || 100
+      for (const pos of positions) {
+        let settlementAmount = 0
+        if (contract.option_type === 'call') {
+          settlementAmount = Math.max(underlyingPrice - strike, 0) * pos.quantity * multiplier
+        } else {
+          settlementAmount = Math.max(strike - underlyingPrice, 0) * pos.quantity * multiplier
+        }
+        if (settlementAmount > 0) {
+          const settlementCNY = toCNY(settlementAmount, contract.market_type)
+          const costPerUnit = parseFloat(pos.total_cost) / pos.quantity
+          const profit = settlementCNY - (costPerUnit * pos.quantity)
+          await UserBalance.increment('cash', { by: settlementCNY, where: { user_id: pos.user_id, group_id: pos.group_id } })
+          await OptionTransaction.create({
+            user_id: pos.user_id,
+            group_id: pos.group_id,
+            contract_id: contract.id,
+            stock_code: contract.stock_code,
+            stock_name: contract.stock_name,
+            option_type: contract.option_type,
+            strike_price: strike,
+            expiration_date: contract.expiration_date,
+            trade_type: 4,
+            quantity: pos.quantity,
+            price: 0,
+            premium: settlementAmount,
+            profit,
+            balance_after: 0,
+            trade_date: expiration_date,
+            settlement_amount: settlementAmount,
+            status: 1
+          })
+        }
+        await OptionPosition.update({ status: 4 }, { where: { id: pos.id } })
+        settled++
+      }
+      await OptionContract.update({ status: 2 }, { where: { id: contract.id } })
+    }
+    res.json({ code: 0, message: `结算完成，处理了 ${settled} 笔持仓` })
   } catch (err) {
     res.json({ code: -1, message: err.message })
   }
