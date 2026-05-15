@@ -42,6 +42,9 @@
           <el-menu-item index="options">
             <span>{{ $t('admin.option_management') }}</span>
           </el-menu-item>
+          <el-menu-item index="scheduler">
+            <span>定时任务</span>
+          </el-menu-item>
           <el-menu-item index="about">
             <span>{{ $t('admin.about') }}</span>
           </el-menu-item>
@@ -537,8 +540,14 @@
               <el-table-column prop="id" label="ID" width="60" />
               <el-table-column prop="stock_code" :label="$t('admin.stock_code')" width="100" />
               <el-table-column prop="stock_name" :label="$t('admin.stock_name')" />
-              <el-table-column :label="$t('admin.market')" width="80">
-                <template #default="{ row }">{{ getMarketLabel(row.market_type) }}</template>
+              <el-table-column label="交易所" width="80">
+                <template #default="{ row }">{{ row.exchange || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="类型" width="70">
+                <template #default="{ row }">{{ ['','ETF','股指','商品'][row.underlying_type || 1] }}</template>
+              </el-table-column>
+              <el-table-column label="行权" width="60">
+                <template #default="{ row }">{{ row.exercise_type === 2 ? '欧式' : '美式' }}</template>
               </el-table-column>
               <el-table-column :label="$t('admin.status')" width="80">
                 <template #default="{ row }">
@@ -563,30 +572,15 @@
             <template #header>
               <div class="card-header">
                 <span>{{ $t('admin.contract_management') }}</span>
-                <el-button type="success" size="small" @click="showGenerateDialog = true" :loading="generating">
-                  {{ $t('admin.generate_contracts') }}
+                <el-button type="success" size="small" @click="syncOption('contracts')" :loading="syncing">
+                  同步合约
                 </el-button>
               </div>
             </template>
-            <div style="margin-bottom:8px;color:#999;font-size:13px">
-              共 {{ contractTotal }} 条合约，当前显示 {{ contractItems.length }} 条
-              <span v-if="contractLoading">（加载中...）</span>
-            </div>
-            <div v-if="contractItems.length === 0 && !contractLoading" style="padding:40px;text-align:center;color:#999">
-              暂无合约数据，请先生成合约
-            </div>
-            <div v-if="contractItems.length > 0" class="contract-list">
-              <div v-for="item in contractItems.slice(0, 5)" :key="item.id"
-                style="padding:6px 10px;border-bottom:1px solid #eee;font-size:13px">
-                <el-tag :type="item.option_type === 'call' ? 'success' : 'danger'" size="small" style="margin-right:8px">
-                  {{ item.option_type === 'call' ? 'Call' : 'Put' }}
-                </el-tag>
-                <strong>{{ item.contract_code }}</strong>
-                <span style="color:#999;margin-left:8px">${{ formatMoney(item.strike_price) }}</span>
-                <span style="color:#999;margin-left:8px">{{ item.expiration_date }}</span>
-              </div>
-            </div>
-            <el-table v-if="contractItems.length > 0" :data="contractItems" stripe v-loading="contractLoading" style="margin-top:10px">
+            <el-table :data="contractItems" stripe v-loading="contractLoading">
+              <template #empty>
+                <div style="padding:30px 0;color:#999">暂无合约数据，请先生成合约</div>
+              </template>
               <el-table-column prop="id" label="ID" width="60" />
               <el-table-column prop="contract_code" label="合约代码" width="180" />
               <el-table-column prop="stock_code" label="代码" width="80" />
@@ -601,7 +595,9 @@
               <el-table-column :label="$t('options_page.strike_price')" width="100">
                 <template #default="{ row }">${{ formatMoney(row.strike_price) }}</template>
               </el-table-column>
-              <el-table-column :label="$t('options_page.expiration')" width="110">{{ row.expiration_date }}</el-table-column>
+              <el-table-column :label="$t('options_page.expiration')" width="110">
+                <template #default="{ row }">{{ row.expiration_date }}</template>
+              </el-table-column>
               <el-table-column :label="$t('admin.status')" width="80">
                 <template #default="{ row }">
                   <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
@@ -619,6 +615,85 @@
                 :current-page="contractPage" layout="prev, pager, next"
                 @current-change="fetchContracts" />
             </div>
+          </el-card>
+
+          <el-card style="margin-top:16px">
+            <template #header>
+              <div class="card-header">
+                <span>AKShare 数据同步</span>
+              </div>
+            </template>
+            <el-row :gutter="12">
+              <el-col :span="4">
+                <el-button type="primary" @click="syncOption('all')" :disabled="syncRunning" style="width:100%">全量同步</el-button>
+              </el-col>
+              <el-col :span="4">
+                <el-button @click="syncOption('contracts')" :disabled="syncRunning" style="width:100%">同步合约</el-button>
+              </el-col>
+              <el-col :span="4">
+                <el-button @click="syncOption('prices')" :disabled="syncRunning" style="width:100%">同步行情</el-button>
+              </el-col>
+              <el-col :span="4">
+                <el-button @click="syncOption('daily_close')" :disabled="syncRunning" style="width:100%">同步收盘</el-button>
+              </el-col>
+              <el-col :span="4">
+                <el-button @click="syncOption('greeks')" :disabled="syncRunning" style="width:100%">同步Greeks</el-button>
+              </el-col>
+              <el-col :span="4">
+                <el-button @click="syncOption('backfill')" :disabled="syncRunning" style="width:100%">回填历史</el-button>
+              </el-col>
+            </el-row>
+            <div v-if="syncRunning" style="margin-top:16px">
+              <el-progress :percentage="syncPercent" :stroke-width="16" :text-inside="true" />
+              <div style="margin-top:6px;font-size:13px;color:#666">{{ syncStatusText }}</div>
+            </div>
+            <div v-else-if="syncMsg" style="margin-top:12px;padding:8px;background:#f0f9eb;border-radius:4px;font-size:13px">
+              {{ syncMsg }}
+            </div>
+          </el-card>
+        </div>
+
+        <div v-if="activeMenu === 'scheduler'" class="scheduler-section">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>定时任务配置</span>
+                <el-button size="small" type="warning" @click="reloadSchedulerJobs" :loading="reloadingScheduler">重载调度器</el-button>
+              </div>
+            </template>
+            <el-table :data="schedulerConfigs" stripe v-loading="schedulerLoading">
+              <el-table-column prop="task_name" label="任务名称" width="160" />
+              <el-table-column prop="task_key" label="标识" width="180" />
+              <el-table-column label="cron 表达式" width="180">
+                <template #default="{ row }">
+                  <el-input v-if="editingSchedulerId === row.id" v-model="editingCron" size="small" style="width:140px" />
+                  <span v-else style="font-family:monospace">{{ row.cron_expression }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="状态" width="80">
+                <template #default="{ row }">
+                  <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
+                    {{ row.enabled ? '运行' : '停用' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="200">
+                <template #default="{ row }">
+                  <template v-if="editingSchedulerId === row.id">
+                    <el-button size="small" type="primary" @click="saveSchedulerConfig(row)">保存</el-button>
+                    <el-button size="small" @click="editingSchedulerId = null">取消</el-button>
+                  </template>
+                  <template v-else>
+                    <el-button size="small" @click="editSchedulerCron(row)">编辑cron</el-button>
+                    <el-button size="small" :type="row.enabled ? 'warning' : 'success'"
+                      @click="toggleScheduler(row)">
+                      {{ row.enabled ? '停用' : '启用' }}
+                    </el-button>
+                  </template>
+                </template>
+              </el-table-column>
+              <el-table-column prop="description" label="说明" min-width="300" />
+            </el-table>
           </el-card>
         </div>
 
@@ -652,47 +727,31 @@
       </el-main>
     </el-container>
 
-    <el-dialog v-model="showWhitelistDialog" title="添加期权白名单" width="500px">
-      <el-form label-width="80px">
-        <el-form-item label="股票">
+    <el-dialog v-model="showWhitelistDialog" title="添加期权白名单" width="550px">
+      <el-form label-width="110px">
+        <el-form-item label="选择标的">
           <el-select
             v-model="whitelistStock"
             filterable
-            remote
-            :remote-method="searchWhitelistStocks"
-            :loading="whitelistSearchLoading"
             style="width:100%"
-            value-key="stock_code"
-            placeholder="输入股票代码或名称搜索"
+            placeholder="搜索或选择中国期权标的"
           >
-            <el-option v-for="s in whitelistSearchResults" :key="s.stock_code"
-              :label="s.stock_code + ' ' + s.stock_name"
-              :value="s" />
+            <el-option
+              v-for="s in chinaOptionUnderlyings"
+              :key="s.code"
+              :label="s.exchange + ' | ' + s.code + ' ' + s.name + ' (' + s.typeName + '/' + s.exerciseName + ')'"
+              :value="s"
+            >
+              <span style="float:left">{{ s.code }}</span>
+              <span style="float:right;color:#999;font-size:12px">{{ s.exchange }} {{ s.typeName }}</span>
+              <span style="display:block;clear:both;font-size:12px;color:#666">{{ s.name }}</span>
+            </el-option>
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showWhitelistDialog = false">{{ $t('common.cancel') }}</el-button>
         <el-button type="primary" @click="addWhitelist" :loading="whitelistSaving">{{ $t('common.confirm') }}</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="showGenerateDialog" title="生成期权合约" width="500px">
-      <el-form label-width="80px">
-        <el-form-item label="标的">
-          <el-select v-model="generateStockId" filterable style="width:100%" placeholder="请选择标的">
-            <el-option v-for="w in whitelistItems" :key="w.id"
-              :label="w.stock_code + ' ' + w.stock_name"
-              :value="w.id" />
-          </el-select>
-        </el-form-item>
-        <div style="color:#999;font-size:13px;padding-left:80px;margin-top:10px">
-          系统会自动为所选标的生成11个行权价 × 5个到期日 × 2种类型 = 110条合约
-        </div>
-      </el-form>
-      <template #footer>
-        <el-button @click="showGenerateDialog = false">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="generateContracts" :loading="generating">{{ $t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 
@@ -1150,7 +1209,7 @@ import { useRouter } from 'vue-router'
 import { i18n } from '@/i18n'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getStats, getGroups, createGroup as createGroupAPI, deleteGroup as deleteGroupAPI, getUsers, toggleUserStatus as toggleUserStatusAPI, deleteUser as deleteUserAPI, getStocks, getStockPositions, createStock as createStockAPI, deleteStock as deleteStockAPI, getInviteCodes, createInviteCode, getCommissionConfigs, updateCommissionConfig, getCommissionHistory, getMarketConfig, updateMarketConfig, getMissingStocks, getGroupStatistics, getUserStatistics, getUserDetail, getUserLoginHistory, getUserTransactions, setTradeEnabled, setAdminAccess, getGroupUsers as getGroupUsersAPI, addGroupUser as addGroupUserAPI, removeGroupUser as removeGroupUserAPI, payDividend, doAllotment, getUserFundFlow, startStockSync, getStockSyncProgress, getStockSyncHistory, getStockSyncDetail, cancelStockSync, getOptionWhitelist, addOptionWhitelist, deleteOptionWhitelist, toggleOptionWhitelistStatus, getOptionContracts, generateOptionContracts } from '@/api/admin'
+import { getStats, getGroups, createGroup as createGroupAPI, deleteGroup as deleteGroupAPI, getUsers, toggleUserStatus as toggleUserStatusAPI, deleteUser as deleteUserAPI, getStocks, getStockPositions, createStock as createStockAPI, deleteStock as deleteStockAPI, getInviteCodes, createInviteCode, getCommissionConfigs, updateCommissionConfig, getCommissionHistory, getMarketConfig, updateMarketConfig, getMissingStocks, getGroupStatistics, getUserStatistics, getUserDetail, getUserLoginHistory, getUserTransactions, setTradeEnabled, setAdminAccess, getGroupUsers as getGroupUsersAPI, addGroupUser as addGroupUserAPI, removeGroupUser as removeGroupUserAPI, payDividend, doAllotment, getUserFundFlow, startStockSync, getStockSyncProgress, getStockSyncHistory, getStockSyncDetail, cancelStockSync, getOptionWhitelist, addOptionWhitelist, deleteOptionWhitelist, toggleOptionWhitelistStatus, getOptionContracts, generateOptionContracts, syncOptionData, getSyncProgress, getSchedulerConfigs, updateSchedulerConfig, reloadScheduler } from '@/api/admin'
 import { getVersion } from '@/api/about'
 
 const router = useRouter()
@@ -1194,6 +1253,13 @@ const showGroupDialog = ref(false)
 const showStockDialog = ref(false)
 const showDividendDialog = ref(false)
 const showAllotmentDialog = ref(false)
+
+// 调度任务
+const schedulerConfigs = ref([])
+const schedulerLoading = ref(false)
+const editingSchedulerId = ref(null)
+const editingCron = ref('')
+const reloadingScheduler = ref(false)
 const dividendStock = ref(null)
 const allotmentStock = ref(null)
 const dividendAmount = ref(0.1)
@@ -1208,23 +1274,37 @@ const showUserDetailDialog = ref(false)
 const showUserLoginHistoryDialog = ref(false)
 const showUserTransactionsDialog = ref(false)
 
+const chinaOptionUnderlyings = [
+  { code: '510050', name: '华夏上证50ETF', exchange: 'SSE', typeName: 'ETF', underlying_type: 1, exercise_type: 1, exerciseName: '美式' },
+  { code: '510300', name: '华泰柏瑞沪深300ETF', exchange: 'SSE', typeName: 'ETF', underlying_type: 1, exercise_type: 1, exerciseName: '美式' },
+  { code: '510500', name: '南方中证500ETF', exchange: 'SSE', typeName: 'ETF', underlying_type: 1, exercise_type: 1, exerciseName: '美式' },
+  { code: '588000', name: '华夏科创50ETF', exchange: 'SSE', typeName: 'ETF', underlying_type: 1, exercise_type: 1, exerciseName: '美式' },
+  { code: '588080', name: '易方达科创50ETF', exchange: 'SSE', typeName: 'ETF', underlying_type: 1, exercise_type: 1, exerciseName: '美式' },
+  { code: '159919', name: '嘉实沪深300ETF', exchange: 'SZSE', typeName: 'ETF', underlying_type: 1, exercise_type: 1, exerciseName: '美式' },
+  { code: '159915', name: '易方达创业板ETF', exchange: 'SZSE', typeName: 'ETF', underlying_type: 1, exercise_type: 1, exerciseName: '美式' },
+  { code: '159901', name: '易方达深证100ETF', exchange: 'SZSE', typeName: 'ETF', underlying_type: 1, exercise_type: 1, exerciseName: '美式' },
+  { code: '159922', name: '嘉实中证500ETF', exchange: 'SZSE', typeName: 'ETF', underlying_type: 1, exercise_type: 1, exerciseName: '美式' },
+  { code: '000300', name: '沪深300股指期权', exchange: 'CFFEX', typeName: '股指', underlying_type: 2, exercise_type: 2, exerciseName: '欧式' },
+  { code: '000016', name: '上证50股指期权', exchange: 'CFFEX', typeName: '股指', underlying_type: 2, exercise_type: 2, exerciseName: '欧式' },
+  { code: '000852', name: '中证1000股指期权', exchange: 'CFFEX', typeName: '股指', underlying_type: 2, exercise_type: 2, exerciseName: '欧式' },
+]
+
 const showWhitelistDialog = ref(false)
-const showGenerateDialog = ref(false)
 const whitelistItems = ref([])
 const whitelistLoading = ref(false)
 const whitelistSaving = ref(false)
-const whitelistSearchLoading = ref(false)
-const whitelistSearchResults = ref([])
 const whitelistStock = ref(null)
-const whitelistForm = reactive({ stock_code: '', stock_name: '', market_type: 3 })
+const syncing = ref(false)
+const syncRunning = ref(false)
+const syncPercent = ref(0)
+const syncStatusText = ref('')
+const syncMsg = ref('')
+let optionSyncTimer = null
 const contractItems = ref([])
 const contractLoading = ref(false)
 const contractTotal = ref(0)
 const contractPage = ref(1)
 const contractPageSize = ref(20)
-const generating = ref(false)
-const generateStockId = ref(null)
-
 const editingGroupId = ref(null)
 const groupForm = reactive({ name: '', description: '', init_cash: 100000 })
 const stockForm = reactive({ stock_code: '', stock_name: '', market_type: 1 })
@@ -1276,12 +1356,19 @@ watch(activeMenu, (val) => {
     fetchWhitelist()
     fetchContracts(1)
   }
+  if (val === 'scheduler') {
+    fetchSchedulerConfigs()
+  }
 })
 
 onUnmounted(() => {
-  if (syncTimer.value) {
-    clearInterval(syncTimer.value)
-    syncTimer.value = null
+  if (syncTimer) {
+    clearInterval(syncTimer)
+    syncTimer = null
+  }
+  if (optionSyncTimer) {
+    clearInterval(optionSyncTimer)
+    optionSyncTimer = null
   }
 })
 
@@ -2132,42 +2219,122 @@ const fetchWhitelist = async () => {
   whitelistLoading.value = false
 }
 
-const searchWhitelistStocks = async (query) => {
-  if (!query || !query.trim()) {
-    whitelistSearchResults.value = []
-    return
-  }
-  whitelistSearchLoading.value = true
-  try {
-    const res = await getStocks({ keyword: query.trim(), page: 1, pageSize: 20 })
-    whitelistSearchResults.value = res.data?.list || []
-  } catch (e) {
-    whitelistSearchResults.value = []
-  }
-  whitelistSearchLoading.value = false
-}
-
 const addWhitelist = async () => {
   if (!whitelistStock.value) return ElMessage.warning(t('admin.select_stock'))
   whitelistSaving.value = true
   try {
     const stock = whitelistStock.value
     const res = await addOptionWhitelist({
-      stock_code: stock.stock_code,
-      market_type: stock.market_type || 3,
-      stock_name: stock.stock_name
+      stock_code: stock.code,
+      market_type: 1,
+      stock_name: stock.name,
+      exchange: stock.exchange,
+      underlying_type: stock.underlying_type,
+      exercise_type: stock.exercise_type,
     })
     if (res.code === 0) {
       ElMessage.success(t('common.success'))
       showWhitelistDialog.value = false
       whitelistStock.value = null
-      whitelistSearchResults.value = []
       fetchWhitelist()
     }
   } catch (e) {
     ElMessage.error(e.message || t('admin.operate_failed'))
   }
   whitelistSaving.value = false
+}
+
+const fetchSchedulerConfigs = async () => {
+  schedulerLoading.value = true
+  try {
+    const res = await getSchedulerConfigs()
+    schedulerConfigs.value = res.data || []
+  } catch (e) {
+    ElMessage.error('获取调度配置失败')
+  }
+  schedulerLoading.value = false
+}
+
+const editSchedulerCron = (row) => {
+  editingSchedulerId.value = row.id
+  editingCron.value = row.cron_expression
+}
+
+const saveSchedulerConfig = async (row) => {
+  try {
+    const res = await updateSchedulerConfig(row.id, { cron_expression: editingCron.value })
+    if (res.code === 0) {
+      ElMessage.success('cron 已更新，调度器已重载')
+      editingSchedulerId.value = null
+      fetchSchedulerConfigs()
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '更新失败')
+  }
+}
+
+const toggleScheduler = async (row) => {
+  try {
+    const res = await updateSchedulerConfig(row.id, { enabled: row.enabled ? 0 : 1 })
+    if (res.code === 0) {
+      ElMessage.success(`任务已${row.enabled ? '停用' : '启用'}`)
+      fetchSchedulerConfigs()
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '操作失败')
+  }
+}
+
+const reloadSchedulerJobs = async () => {
+  reloadingScheduler.value = true
+  try {
+    const res = await reloadScheduler()
+    ElMessage.success(res.message || '调度器已重载')
+  } catch (e) {
+    ElMessage.error(e.message || '重载失败')
+  }
+  reloadingScheduler.value = false
+}
+
+const syncOption = async (action) => {
+  syncing.value = true
+  syncMsg.value = ''
+  try {
+    const res = await syncOptionData(action)
+    if (res.code !== 0) {
+      ElMessage.error(res.message || '启动失败')
+      return
+    }
+    // 开始轮询进度
+    syncRunning.value = true
+    syncPercent.value = 0
+    syncStatusText.value = '启动中...'
+    optionSyncTimer = setInterval(async () => {
+      try {
+        const pr = await getSyncProgress()
+        const s = pr.data || {}
+        syncPercent.value = s.total > 0 ? Math.round(s.completed / s.total * 100) : 0
+        syncStatusText.value = s.current || ''
+        if (!s.running) {
+          clearInterval(optionSyncTimer)
+          optionSyncTimer = null
+          syncRunning.value = false
+          syncMsg.value = s.message || s.error || '同步完成'
+          if (s.error) {
+            ElMessage.error('同步失败: ' + s.error)
+          } else {
+            ElMessage.success(s.message || '同步完成')
+          }
+        }
+      } catch (e) {
+        // 轮询失败忽略
+      }
+    }, 1000)
+  } catch (e) {
+    syncMsg.value = e.message || '同步失败'
+    ElMessage.error(e.message || '同步失败')
+  }
+  syncing.value = false
 }
 
 const toggleWhitelistStatus = async (row) => {
@@ -2218,24 +2385,6 @@ const fetchContracts = async (page) => {
   contractLoading.value = false
 }
 
-const generateContracts = async () => {
-  if (!generateStockId.value) return ElMessage.warning(t('admin.select_stock'))
-  const stock = whitelistItems.value.find(w => w.id === generateStockId.value)
-  if (!stock) return
-  generating.value = true
-  try {
-    const res = await generateOptionContracts({ stock_code: stock.stock_code, market_type: stock.market_type })
-    if (res.code === 0) {
-      ElMessage.success(t('common.success'))
-      showGenerateDialog.value = false
-      generateStockId.value = null
-      fetchContracts(1)
-    }
-  } catch (e) {
-    ElMessage.error(e.message || t('admin.operate_failed'))
-  }
-  generating.value = false
-}
 </script>
 
 <style scoped>

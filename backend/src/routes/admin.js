@@ -13,8 +13,10 @@
 const express = require('express')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
-const { sequelize, AdminUser, Group, User, UserGroup, UserBalance, Position, Transaction, StockPool, StockPricesCache, InviteCode, CommissionConfig, LoginHistory, MarketConfig, CommissionHistory, GroupMessage, StockSyncRecord, OptionWhitelist, OptionContract } = require('../models')
+const { sequelize, AdminUser, Group, User, UserGroup, UserBalance, Position, Transaction, StockPool, StockPricesCache, InviteCode, CommissionConfig, LoginHistory, MarketConfig, CommissionHistory, GroupMessage, StockSyncRecord, OptionWhitelist, OptionContract, OptionPrice, OptionPosition, SchedulerConfig } = require('../models')
 const optionService = require('../services/option')
+const optionSync = require('../services/optionSync')
+const syncProgress = require('../services/syncProgress')
 const { toCNY } = require('../utils/currency')
 const { pinyin } = require('pinyin-pro')
 const { Op } = require('sequelize')
@@ -1468,14 +1470,31 @@ router.get('/options/whitelist', async (req, res) => {
  */
 router.post('/options/whitelist', async (req, res) => {
   try {
-    const { stock_code, market_type, stock_name } = req.body
-    if (!stock_code || !market_type) {
+    const { stock_code, market_type, stock_name, underlying_type, exchange, exercise_type, contract_multiplier } = req.body
+    if (!stock_code) {
       return res.json({ code: -1, message: '参数不完整' })
     }
     const [record, created] = await OptionWhitelist.findOrCreate({
-      where: { stock_code, market_type: parseInt(market_type) },
-      defaults: { stock_code, market_type: parseInt(market_type), stock_name: stock_name || stock_code }
+      where: { stock_code, market_type: parseInt(market_type || 1) },
+      defaults: {
+        stock_code,
+        market_type: parseInt(market_type || 1),
+        stock_name: stock_name || stock_code,
+        underlying_type: parseInt(underlying_type || 1),
+        exchange: exchange || 'SSE',
+        exercise_type: parseInt(exercise_type || 1),
+        contract_multiplier: parseInt(contract_multiplier || 10000),
+        underlying_code: stock_code,
+      }
     })
+    if (!created) {
+      await record.update({
+        underlying_type: parseInt(underlying_type || record.underlying_type || 1),
+        exchange: exchange || record.exchange || 'SSE',
+        exercise_type: parseInt(exercise_type || record.exercise_type || 1),
+        contract_multiplier: parseInt(contract_multiplier || record.contract_multiplier || 10000),
+      })
+    }
     res.json({ code: 0, data: record })
   } catch (err) {
     res.json({ code: -1, message: err.message })
@@ -1613,6 +1632,140 @@ router.post('/options/settlement', async (req, res) => {
       await OptionContract.update({ status: 2 }, { where: { id: contract.id } })
     }
     res.json({ code: 0, message: `结算完成，处理了 ${settled} 笔持仓` })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+// ============================================
+// AKShare 数据同步接口
+// ============================================
+
+/**
+ * POST /api/v1/admin/options/sync - 触发AKShare数据同步
+ * GET /api/v1/admin/options/sync/progress - 查询同步进度
+ */
+router.post('/options/sync', async (req, res) => {
+  if (syncProgress.getStatus().running) {
+    return res.json({ code: -1, message: '已有同步任务正在执行，请等待完成' })
+  }
+
+  const { action } = req.body
+  const stepCounts = { contracts: 1, prices: 1, daily_close: 1, greeks: 1, backfill: 1, all: 4 }
+  const total = stepCounts[action] || 1
+  syncProgress.reset(action, total)
+
+  res.json({ code: 0, message: '同步已启动' })
+
+  setImmediate(async () => {
+    try {
+      switch (action) {
+        case 'contracts': {
+          const r = await optionSync.batchSaveContractsToDB()
+          syncProgress.step(`合约同步完成: ${r} 个`)
+          syncProgress.finish(`合约同步完成: ${r} 个`)
+          break
+        }
+        case 'prices': {
+          const r = await optionSync.updateRealtimePrices()
+          syncProgress.step(`行情更新完成: ${r} 条`)
+          syncProgress.finish(`行情更新完成: ${r} 条`)
+          break
+        }
+        case 'daily_close': {
+          const r = await optionSync.syncAllDailyClose()
+          syncProgress.step(`收盘价同步完成: ${r} 条`)
+          syncProgress.finish(`收盘价同步完成: ${r} 条`)
+          break
+        }
+        case 'greeks': {
+          const r = await optionSync.syncGreeks()
+          syncProgress.step(`Greeks同步完成: ${r.length} 条`)
+          syncProgress.finish(`Greeks同步完成: ${r.length} 条`)
+          break
+        }
+        case 'backfill': {
+          const r = await optionSync.initBackfill('510050', '50ETF')
+          syncProgress.step(`历史回填完成: ${r.length} 条`)
+          syncProgress.finish(`历史回填完成: ${r.length} 条`)
+          break
+        }
+        case 'all': {
+          const c = await optionSync.batchSaveContractsToDB()
+          syncProgress.step(`合约同步完成: ${c} 个`)
+
+          const p = await optionSync.updateRealtimePrices()
+          syncProgress.step(`行情更新完成: ${p} 条`)
+
+          const d = await optionSync.syncAllDailyClose()
+          syncProgress.step(`收盘价同步完成: ${d} 条`)
+
+          const g = await optionSync.syncGreeks()
+          syncProgress.step(`Greeks同步完成: ${g.length} 条`)
+
+          syncProgress.finish(`全量同步完成: 合约${c}个, 行情${p}条, 收盘${d}条, Greeks${g.length}条`)
+          break
+        }
+      }
+    } catch (e) {
+      syncProgress.fail(e.message)
+    }
+  })
+})
+
+router.get('/options/sync/progress', async (req, res) => {
+  res.json({ code: 0, data: syncProgress.getStatus() })
+})
+
+// ============================================
+// 调度任务配置管理
+// ============================================
+
+/**
+ * GET /api/v1/admin/scheduler/configs - 获取所有调度任务配置
+ */
+router.get('/scheduler/configs', async (req, res) => {
+  try {
+    const list = await SchedulerConfig.findAll({ order: [['id', 'ASC']], raw: true })
+    res.json({ code: 0, data: list })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * PUT /api/v1/admin/scheduler/configs/:id - 更新调度任务配置
+ * body: { cron_expression?, enabled? }
+ */
+router.put('/scheduler/configs/:id', async (req, res) => {
+  try {
+    const { cron_expression, enabled } = req.body
+    const update = {}
+    if (cron_expression !== undefined) update.cron_expression = cron_expression
+    if (enabled !== undefined) update.enabled = parseInt(enabled)
+
+    await SchedulerConfig.update(update, { where: { id: req.params.id } })
+    // 热重载调度器
+    try {
+      const scheduler = require('../scheduler/optionScheduler')
+      await scheduler.reload()
+    } catch (e) {
+      console.log('调度器热重载:', e.message)
+    }
+    res.json({ code: 0, message: '调度配置已更新' })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/scheduler/reload - 热重载调度任务
+ */
+router.post('/scheduler/reload', async (req, res) => {
+  try {
+    const scheduler = require('../scheduler/optionScheduler')
+    await scheduler.reload()
+    res.json({ code: 0, message: '调度器已重载' })
   } catch (err) {
     res.json({ code: -1, message: err.message })
   }

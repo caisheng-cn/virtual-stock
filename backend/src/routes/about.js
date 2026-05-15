@@ -14,7 +14,7 @@ const path = require('path')
 
 const router = express.Router()
 
-const VERSION_FILE = path.join(__dirname, '../../../../version.json')
+const VERSION_FILE = path.join(__dirname, '../../../version.json')
 
 /**
  * Read the version.json file and return version information.

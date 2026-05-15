@@ -3,7 +3,7 @@
     <div class="header">
       <h2>{{ $t('options_page.title') }}</h2>
       <div>
-        <el-button @click="$router.push('/home')">{{ $t('common.back') }}</el-button>
+        <el-button @click="goHome">{{ $t('common.back') }}</el-button>
       </div>
     </div>
 
@@ -33,7 +33,9 @@
         </el-col>
         <el-col :span="6">
           <div class="underlying-price" v-if="underlyingPrice">
-            标的价: <strong>${{ formatMoney(underlyingPrice) }}</strong>
+            标的价: <strong>¥{{ formatMoney(underlyingPrice) }}</strong>
+            <el-tag v-if="chainData?.isTradingHours" size="mini" type="success" style="margin-left:6px">交易中</el-tag>
+            <el-tag v-else size="mini" type="info" style="margin-left:6px">休市</el-tag>
           </div>
         </el-col>
       </el-row>
@@ -41,7 +43,7 @@
 
     <el-card v-if="selectedStock && expirations.length" class="expiry-selector">
       <el-tabs v-model="activeExpiration" @tab-change="onExpirationChange">
-        <el-tab-pane v-for="exp in expirations" :key="exp" :label="formatExpiryLabel(exp)" :name="exp" />
+        <el-tab-pane v-for="exp in expirations" :key="exp.date || exp" :label="formatExpiryLabel(exp)" :name="exp.date || exp" />
       </el-tabs>
     </el-card>
 
@@ -113,8 +115,10 @@
               <span class="value">{{ activeExpiration }}</span>
             </div>
             <div class="detail-row">
-              <span class="label">{{ $t('options_page.premium') }}:</span>
-              <span class="value highlight">${{ formatMoney(currentPremium) }}</span>
+          <span class="label">{{ $t('options_page.premium') }}:</span>
+          <span class="value highlight">¥{{ formatMoney(currentPremium) }}</span>
+          <el-tag v-if="chainData?.isTradingHours" size="mini" type="success" style="margin-left:6px">实时</el-tag>
+          <el-tag v-else size="mini" type="warning" style="margin-left:6px">参考</el-tag>
             </div>
             <div class="detail-row">
               <span class="label">{{ $t('options_page.intrinsic_value') }}:</span>
@@ -134,15 +138,13 @@
                 <el-input-number v-model="tradeQuantity" :min="1" :max="9999" />
               </el-form-item>
               <el-form-item :label="$t('options_page.estimated_premium')">
-                <span class="amount">${{ formatMoney(estimatedPremium) }}</span>
-                <span class="amount-cny">(~¥{{ formatMoney(estimatedPremiumCNY) }})</span>
+                <span class="amount">¥{{ formatMoney(estimatedPremium) }}</span>
               </el-form-item>
               <el-form-item :label="$t('options_page.estimated_commission')">
-                <span class="commission">${{ formatMoney(estimatedCommission) }}</span>
-                <span class="amount-cny">(~¥{{ formatMoney(estimatedCommissionCNY) }})</span>
+                <span class="commission">¥{{ formatMoney(estimatedCommission) }}</span>
               </el-form-item>
               <el-form-item :label="$t('options_page.total_deduct')">
-                <span class="total">¥{{ formatMoney(totalDeductCNY) }}</span>
+                <span class="total">¥{{ formatMoney(totalDeduct) }}</span>
               </el-form-item>
               <el-form-item>
                 <el-button type="primary" @click="handleBuy" :loading="buying" style="width:100%">
@@ -179,8 +181,12 @@
         <el-table-column :label="$t('options_page.strike_price')" width="90">
           <template #default="{ row }">${{ formatMoney(row.strikePrice) }}</template>
         </el-table-column>
-        <el-table-column :label="$t('options_page.expiration')" width="100">{{ row.expirationDate }}</el-table-column>
-        <el-table-column :label="$t('options_page.days_to_expiry')" width="80">{{ row.daysToExpiry }}天</el-table-column>
+        <el-table-column :label="$t('options_page.expiration')" width="100">
+          <template #default="{ row }">{{ row.expirationDate }}</template>
+        </el-table-column>
+        <el-table-column :label="$t('options_page.days_to_expiry')" width="80">
+          <template #default="{ row }">{{ row.daysToExpiry }}天</template>
+        </el-table-column>
         <el-table-column :label="$t('options_page.quantity')" prop="quantity" width="60" />
         <el-table-column :label="$t('options_page.avg_cost')" width="80">
           <template #default="{ row }">${{ formatMoney(row.avgCost) }}</template>
@@ -197,7 +203,9 @@
           <template #default="{ row }">
             <el-button size="small" type="primary" @click="openSellDialog(row)">{{ $t('options_page.sell_to_close') }}</el-button>
             <el-button size="small" type="warning" @click="handleExerciseDirect(row)"
-              :disabled="row.moneyness !== 'itm'">{{ $t('options_page.exercise') }}</el-button>
+              :disabled="row.moneyness !== 'itm' || row.exerciseType === 2"
+              v-if="row.exerciseType !== 2">{{ $t('options_page.exercise') }}</el-button>
+            <el-tag v-else size="small" type="info">欧式·自动结算</el-tag>
           </template>
         </el-table-column>
       </el-table>
@@ -228,12 +236,14 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getWhitelist, getExpirations, getOptionChain, buyOption, sellOption, exerciseOption, getOptionPositions } from '@/api/options'
 import { getMyGroups, getBalance } from '@/api/group'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const whitelist = ref([])
 const searchLoading = ref(false)
@@ -253,8 +263,6 @@ const optionPositions = ref([])
 const sellDialogVisible = ref(false)
 const sellRow = ref({})
 const sellQuantity = ref(1)
-
-const EXCHANGE_RATES = { 1: 1, 2: 0.9, 3: 7 }
 
 const chainRows = computed(() => {
   if (!chainData.value) return []
@@ -297,37 +305,29 @@ const currentTimeValue = computed(() => {
 })
 
 const estimatedPremium = computed(() => {
-  return (currentPremium.value || 0) * tradeQuantity.value * 100
-})
-
-const estimatedPremiumCNY = computed(() => {
-  const rate = EXCHANGE_RATES[chainData.value?.marketType || 1] || 1
-  return estimatedPremium.value * rate
+  return (currentPremium.value || 0) * tradeQuantity.value * 10000
 })
 
 const estimatedCommission = computed(() => {
   return Math.round(estimatedPremium.value * 0.5 / 1000 * 100) / 100
 })
 
-const estimatedCommissionCNY = computed(() => {
-  const rate = EXCHANGE_RATES[chainData.value?.marketType || 1] || 1
-  return estimatedCommission.value * rate
-})
-
-const totalDeductCNY = computed(() => estimatedPremiumCNY.value + estimatedCommissionCNY.value)
+const totalDeduct = computed(() => estimatedPremium.value + estimatedCommission.value)
 
 const formatMoney = (value) => {
   if (!value && value !== 0) return '0.00'
   return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
-const formatExpiryLabel = (dateStr) => {
+const formatExpiryLabel = (exp) => {
+  const dateStr = typeof exp === 'string' ? exp : (exp.date || exp)
   const d = new Date(dateStr)
   const today = new Date()
   const days = Math.ceil((d - today) / (1000 * 60 * 60 * 24))
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
-  return `${mm}/${dd} (${days}天)`
+  const exchange = typeof exp === 'object' && exp.exchange ? `[${exp.exchange}]` : ''
+  return `${exchange} ${mm}/${dd} (${days}天)`
 }
 
 const searchStocks = async (query) => {
@@ -359,10 +359,12 @@ const onStockSelected = async (stock) => {
   }
   selectedStock.value = stock
   try {
-    const expRes = await getExpirations(stock.stock_code, stock.market_type)
-    expirations.value = expRes.data || []
+    const expRes = await getExpirations(stock.stock_code, stock.market_type, stock.exchange)
+    const raw = expRes.data || []
+    // 兼容新旧格式: 新格式是 {date, exchange} 对象，旧格式是纯字符串
+    expirations.value = raw.map(e => typeof e === 'string' ? { date: e, exchange: '' } : e)
     if (expirations.value.length) {
-      activeExpiration.value = expirations.value[0]
+      activeExpiration.value = expirations.value[0].date || expirations.value[0]
       await loadChain()
     }
   } catch (e) {
@@ -383,7 +385,7 @@ const loadChain = async () => {
     selectedContract.value = null
     await loadOptionPositions()
   } catch (e) {
-    ElMessage.error(e.response?.data?.message || t('common.error'))
+    ElMessage.error(e.message || e.response?.data?.message || t('common.error'))
   }
 }
 
@@ -392,6 +394,10 @@ const loadOptionPositions = async () => {
     const res = await getOptionPositions(currentGroupId.value)
     optionPositions.value = res.data || []
   } catch (e) {}
+}
+
+const goHome = () => {
+  router.push('/home')
 }
 
 const selectContract = (side, row) => {
@@ -413,8 +419,8 @@ const handleBuy = async () => {
     `${t('options_page.option_type')}: ${selectedSide.value === 'call' ? 'Call' : 'Put'}\n` +
     `${t('options_page.expiration')}: ${activeExpiration.value}\n` +
     `${t('options_page.quantity')}: ${tradeQuantity.value}\n` +
-    `${t('options_page.estimated_premium')}: $${formatMoney(estimatedPremium.value)}\n` +
-    `${t('options_page.total_deduct')}: ¥${formatMoney(totalDeductCNY.value)}`
+    `${t('options_page.estimated_premium')}: ¥${formatMoney(estimatedPremium.value)}\n` +
+    `${t('options_page.total_deduct')}: ¥${formatMoney(totalDeduct.value)}`
 
   try {
     await ElMessageBox.confirm(confirmMsg, t('options_page.buy_to_open'), {
@@ -437,7 +443,7 @@ const handleBuy = async () => {
     tradeQuantity.value = 1
     await loadChain()
   } catch (err) {
-    ElMessage.error(err.response?.data?.message || t('common.error'))
+    ElMessage.error(err.message || err.response?.data?.message || t('common.error'))
   } finally {
     buying.value = false
   }
@@ -460,7 +466,7 @@ const confirmSell = async () => {
     sellDialogVisible.value = false
     await loadOptionPositions()
   } catch (err) {
-    ElMessage.error(err.response?.data?.message || t('common.error'))
+    ElMessage.error(err.message || err.response?.data?.message || t('common.error'))
   } finally {
     selling.value = false
   }
@@ -480,7 +486,7 @@ const handleExerciseDirect = async (row) => {
     ElMessage.success(t('options_page.exercise_success'))
     await loadOptionPositions()
   } catch (err) {
-    ElMessage.error(err.response?.data?.message || t('common.error'))
+    ElMessage.error(err.message || err.response?.data?.message || t('common.error'))
   }
 }
 

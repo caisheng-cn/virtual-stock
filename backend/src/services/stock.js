@@ -300,5 +300,6 @@ module.exports = {
   getBatchQuotes,
   runPythonABatch,
   runPythonBatchHKAKShare,
-  runPythonBatchUSAKShare
+  runPythonBatchUSAKShare,
+  runPythonScript
 }

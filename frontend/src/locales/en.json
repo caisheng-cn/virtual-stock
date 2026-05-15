@@ -57,7 +57,12 @@
     "user_not_found": "User not found",
     "invite_code_invalid": "Invalid invite code",
     "user_exists": "Username already exists",
-    "welcome": "Welcome"
+    "welcome": "Welcome",
+    "password_confirm_placeholder": "Confirm Password",
+    "password_confirm_rule": "Please confirm your password",
+    "password_mismatch": "Passwords do not match",
+    "wrong_old_password": "Old password is incorrect",
+    "password_too_short": "Password must be at least 6 characters"
   },
   "nav": {
     "home": "Home",
@@ -427,6 +432,17 @@
     "allotment": "Allotment",
     "no_records": "No fund flow records",
     "fetch_failed": "Failed to fetch fund flow"
+  },
+  "home": {
+    "change_password": "Change Password",
+    "old_password_placeholder": "Old Password",
+    "new_password_placeholder": "New Password (min 6)",
+    "confirm_password_placeholder": "Confirm New Password",
+    "old_password_rule": "Please enter old password",
+    "new_password_rule": "Please enter new password",
+    "confirm_password_rule": "Please confirm new password",
+    "password_mismatch": "Passwords do not match",
+    "password_change_success": "Password changed successfully"
   },
   "options_page": {
     "title": "Options Trading",

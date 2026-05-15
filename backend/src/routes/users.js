@@ -179,6 +179,42 @@ router.put('/info', require('../utils/auth'), async (req, res) => {
        updateData.language = language
      }
      await User.update(updateData, { where: { id: req.userId } })
+      res.json({ code: 0, message: res.t('common.success') })
+    } catch (err) {
+      console.error(err)
+      res.json({ code: -1, message: res.t('common.error') })
+    }
+  })
+
+/**
+ * PUT /api/v1/users/password
+ * Change password. Requires old password verification and new password.
+ * Body: { oldPassword, newPassword }
+ * Response: { code, message }
+ */
+router.put('/password', require('../utils/auth'), async (req, res) => {
+   try {
+     const { oldPassword, newPassword } = req.body
+     if (!oldPassword || !newPassword) {
+       return res.json({ code: -1, message: res.t('trade.parameter_missing') })
+     }
+     if (newPassword.length < 6) {
+       return res.json({ code: -1, message: res.t('auth.password_too_short') })
+     }
+
+     const user = await User.findByPk(req.userId)
+     if (!user) {
+       return res.json({ code: -1, message: res.t('auth.user_not_found') })
+     }
+
+     const isValid = await bcrypt.compare(oldPassword, user.password)
+     if (!isValid) {
+       return res.json({ code: -1, message: res.t('auth.wrong_old_password') })
+     }
+
+     const hashedPassword = await bcrypt.hash(newPassword, 10)
+     await User.update({ password: hashedPassword }, { where: { id: req.userId } })
+
      res.json({ code: 0, message: res.t('common.success') })
    } catch (err) {
      console.error(err)

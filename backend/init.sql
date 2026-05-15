@@ -417,3 +417,169 @@ INSERT INTO market_config (market_type, refresh_time, trade_start, trade_end) VA
 (2, '09:30', '09:30', '16:00'),
 (3, '04:00', '09:30', '16:00')
 ON DUPLICATE KEY UPDATE refresh_time = VALUES(refresh_time);
+
+-- ============================================================
+-- 24. 期权标的白名单
+-- ============================================================
+CREATE TABLE IF NOT EXISTS option_whitelist (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  stock_code VARCHAR(20) NOT NULL COMMENT '标的代码',
+  market_type TINYINT NOT NULL DEFAULT 1 COMMENT '市场类型 1=A股',
+  stock_name VARCHAR(100) NOT NULL COMMENT '标的名称',
+  status TINYINT DEFAULT 1 COMMENT '状态 1=启用 0=停用',
+  underlying_type TINYINT DEFAULT 1 COMMENT '标的类型 1=ETF 2=股指 3=商品',
+  exchange VARCHAR(10) DEFAULT '' COMMENT '交易所 SSE/SZSE/CFFEX/DCE/SHFE/CZCE/GFEX',
+  underlying_code VARCHAR(20) DEFAULT '' COMMENT '标的实际代码(如510050)',
+  contract_multiplier INT DEFAULT 10000 COMMENT '合约单位(张)',
+  exercise_type TINYINT DEFAULT 1 COMMENT '行权方式 1=美式 2=欧式',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_stock_market (stock_code, market_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='期权标的白名单';
+
+-- ============================================================
+-- 25. 期权合约
+-- ============================================================
+CREATE TABLE IF NOT EXISTS option_contracts (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  stock_code VARCHAR(20) NOT NULL COMMENT '标的代码',
+  market_type TINYINT NOT NULL DEFAULT 1 COMMENT '市场类型',
+  stock_name VARCHAR(100) NOT NULL DEFAULT '' COMMENT '标的名称',
+  option_type ENUM('call', 'put') NOT NULL COMMENT '期权类型',
+  strike_price DECIMAL(12,2) NOT NULL COMMENT '行权价',
+  expiration_date DATE NOT NULL COMMENT '到期日',
+  contract_code VARCHAR(50) NOT NULL COMMENT '合约代码',
+  contract_multiplier INT DEFAULT 10000 COMMENT '合约乘数',
+  status TINYINT DEFAULT 1 COMMENT '状态 1=交易中 2=已到期 3=已下架',
+  underlying_price DECIMAL(12,2) DEFAULT 0 COMMENT '生成时的标的价',
+  exchange VARCHAR(10) DEFAULT '' COMMENT '交易所 SSE/SZSE/CFFEX/DCE/SHFE/CZCE/GFEX',
+  contract_name VARCHAR(100) DEFAULT '' COMMENT '合约简称(如50ETF购6月2800)',
+  exercise_type TINYINT DEFAULT 1 COMMENT '行权方式 1=美式 2=欧式',
+  contract_code_sse VARCHAR(20) DEFAULT '' COMMENT '上交所内部合约编码(如10011251)',
+  contract_code_ctp VARCHAR(50) DEFAULT '' COMMENT 'openCTP合约ID(如510050C2606A03000)',
+  prev_settle DECIMAL(12,4) DEFAULT 0 COMMENT '昨结算价',
+  listing_date DATE DEFAULT NULL COMMENT '上市日期',
+  last_trade_date DATE DEFAULT NULL COMMENT '最后交易日',
+  delivery_date DATE DEFAULT NULL COMMENT '交割日',
+  underlying_code VARCHAR(20) DEFAULT '' COMMENT '标的代码(冗余)',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_contract_code (contract_code),
+  INDEX idx_exchange (exchange),
+  INDEX idx_stock_expiry (stock_code, expiration_date),
+  INDEX idx_expiration_status (expiration_date, status),
+  INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='期权合约';
+
+-- ============================================================
+-- 26. 用户期权持仓
+-- ============================================================
+CREATE TABLE IF NOT EXISTS option_positions (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL COMMENT '用户ID',
+  group_id INT NOT NULL COMMENT '群组ID',
+  contract_id INT NOT NULL COMMENT '合约ID',
+  quantity INT NOT NULL DEFAULT 0 COMMENT '持仓张数',
+  avg_cost DECIMAL(12,4) NOT NULL DEFAULT 0 COMMENT '平均成本（每张权利金）',
+  total_cost DECIMAL(14,2) NOT NULL DEFAULT 0 COMMENT '总成本（含手续费）',
+  status TINYINT DEFAULT 1 COMMENT '状态 1=持仓中 2=已平仓 3=已行权 4=已到期',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_user_group_contract (user_id, group_id, contract_id),
+  INDEX idx_user_group (user_id, group_id),
+  INDEX idx_contract (contract_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户期权持仓';
+
+-- ============================================================
+-- 27. 期权交易记录
+-- ============================================================
+CREATE TABLE IF NOT EXISTS option_transactions (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL COMMENT '用户ID',
+  group_id INT NOT NULL COMMENT '群组ID',
+  contract_id INT NOT NULL COMMENT '合约ID',
+  stock_code VARCHAR(20) NOT NULL COMMENT '标的代码',
+  stock_name VARCHAR(100) NOT NULL COMMENT '标的名称',
+  option_type ENUM('call', 'put') NOT NULL COMMENT '期权类型',
+  strike_price DECIMAL(12,2) NOT NULL COMMENT '行权价',
+  expiration_date DATE NOT NULL COMMENT '到期日',
+  trade_type TINYINT NOT NULL COMMENT '交易类型 1=买入开仓 2=卖出平仓 3=行权 4=到期结算',
+  quantity INT NOT NULL COMMENT '张数',
+  price DECIMAL(12,4) NOT NULL COMMENT '成交价（每张权利金）',
+  premium DECIMAL(14,2) NOT NULL COMMENT '权利金总额',
+  commission DECIMAL(12,2) DEFAULT 0 COMMENT '手续费',
+  commission_rate DECIMAL(6,4) DEFAULT 0 COMMENT '手续费率',
+  profit DECIMAL(14,2) DEFAULT 0 COMMENT '盈亏',
+  balance_after DECIMAL(14,2) DEFAULT 0 COMMENT '交易后现金余额',
+  trade_date DATE NOT NULL COMMENT '交易日期',
+  settlement_amount DECIMAL(14,2) DEFAULT 0 COMMENT '结算金额',
+  status TINYINT DEFAULT 1 COMMENT '状态 1=正常',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user_group (user_id, group_id),
+  INDEX idx_trade_date (trade_date),
+  INDEX idx_contract (contract_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='期权交易记录';
+
+-- ============================================================
+-- 28. 期权每日行情
+-- ============================================================
+CREATE TABLE IF NOT EXISTS option_prices (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  contract_id INT NOT NULL COMMENT '合约ID',
+  trade_date DATE NOT NULL COMMENT '日期',
+  premium DECIMAL(14,4) NOT NULL COMMENT '权利金',
+  intrinsic_value DECIMAL(14,4) DEFAULT 0 COMMENT '内在价值',
+  time_value DECIMAL(14,4) DEFAULT 0 COMMENT '时间价值',
+  settle DECIMAL(14,4) DEFAULT 0 COMMENT '结算价',
+  prev_settle DECIMAL(14,4) DEFAULT 0 COMMENT '昨结算价',
+  open_interest INT DEFAULT 0 COMMENT '持仓量',
+  volume INT DEFAULT 0 COMMENT '成交量',
+  delta DECIMAL(6,4) DEFAULT 0 COMMENT 'Delta',
+  gamma DECIMAL(10,6) DEFAULT 0 COMMENT 'Gamma',
+  theta DECIMAL(10,6) DEFAULT 0 COMMENT 'Theta',
+  vega DECIMAL(10,6) DEFAULT 0 COMMENT 'Vega',
+  rho DECIMAL(10,6) DEFAULT 0 COMMENT 'Rho',
+  implied_volatility DECIMAL(6,4) DEFAULT 0 COMMENT '隐含波动率',
+  underlying_price DECIMAL(14,2) NOT NULL COMMENT '当日标的收盘价',
+  bid_price DECIMAL(12,4) DEFAULT 0 COMMENT '买一价',
+  ask_price DECIMAL(12,4) DEFAULT 0 COMMENT '卖一价',
+  change_percent DECIMAL(8,4) DEFAULT 0 COMMENT '涨跌幅(%)',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_contract_date (contract_id, trade_date),
+  INDEX idx_trade_date (trade_date),
+  INDEX idx_trade_date_only (trade_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='期权每日行情';
+
+-- ============================================================
+-- 29. 调度任务配置
+-- ============================================================
+CREATE TABLE IF NOT EXISTS scheduler_configs (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  task_key VARCHAR(50) NOT NULL COMMENT '任务唯一标识',
+  task_name VARCHAR(100) NOT NULL COMMENT '任务显示名称',
+  cron_expression VARCHAR(50) NOT NULL COMMENT 'cron 表达式',
+  enabled TINYINT DEFAULT 1 COMMENT '是否启用 1=启用 0=停用',
+  description VARCHAR(500) DEFAULT '' COMMENT '任务描述',
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_task_key (task_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='调度任务配置';
+
+-- ============================================================
+-- 扩展 group_messages 表 - 增加期权字段
+-- ============================================================
+ALTER TABLE group_messages
+  ADD COLUMN option_type ENUM('call', 'put') DEFAULT NULL COMMENT '期权类型（期权消息专用）',
+  ADD COLUMN strike_price DECIMAL(12,2) DEFAULT NULL COMMENT '行权价（期权消息专用）',
+  ADD COLUMN expiration_date DATE DEFAULT NULL COMMENT '到期日（期权消息专用）',
+  ADD COLUMN quantity INT DEFAULT NULL COMMENT '张数（期权消息专用）';
+
+-- ============================================================
+-- 调度任务种子数据
+-- ============================================================
+INSERT IGNORE INTO scheduler_configs (task_key, task_name, cron_expression, enabled, description) VALUES
+('option_contract_sync', '同步期权合约', '50 8 * * 1-5', 1, '每个交易日 08:50 从 AKShare 同步全量合约列表'),
+('option_price_sync', '同步实时行情', '*/5 9,10,11,13,14 * * 1-5', 1, '交易时段每5分钟刷新期权实时报价'),
+('option_daily_close', '同步收盘数据', '5 15 * * 1-5', 1, '每个交易日 15:05 同步日线收盘价和 Greeks'),
+('option_settlement', '到期自动结算', '10 15 * * 1-5', 1, '每个交易日 15:10 自动结算当日到期的实值期权'),
+('stock_data_sync', '同步股票数据', '0 9 * * 1-5', 1, '每个交易日 09:00 同步 A 股/港股/美股日线数据');

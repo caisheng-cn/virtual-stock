@@ -9,6 +9,9 @@
         <el-form-item prop="password">
           <el-input v-model="form.password" type="password" :placeholder="$t('auth.password_placeholder_register')" prefix-icon="Lock" />
         </el-form-item>
+        <el-form-item prop="confirmPassword">
+          <el-input v-model="form.confirmPassword" type="password" :placeholder="$t('auth.password_confirm_placeholder')" prefix-icon="Lock" />
+        </el-form-item>
         <el-form-item prop="nickname">
           <el-input v-model="form.nickname" :placeholder="$t('auth.nickname_placeholder')" prefix-icon="UserFilled" />
         </el-form-item>
@@ -50,14 +53,27 @@ const loading = ref(false)
 const form = reactive({
   username: '',
   password: '',
+  confirmPassword: '',
   nickname: '',
   invite_code: ''
 })
 
+const validatePass = (rule, value, callback) => {
+  if (value !== form.password) {
+    callback(new Error(t('auth.password_mismatch')))
+  } else {
+    callback()
+  }
+}
+
 const rules = {
   username: [{ required: true, message: t('auth.username_rule'), trigger: 'blur' }],
   password: [{ required: true, message: t('auth.password_rule'), trigger: 'blur' }],
-  inviteCode: [{ required: true, message: t('auth.invite_code_rule'), trigger: 'blur' }]
+  confirmPassword: [
+    { required: true, message: t('auth.password_confirm_rule'), trigger: 'blur' },
+    { validator: validatePass, trigger: 'blur' }
+  ],
+  invite_code: [{ required: true, message: t('auth.invite_code_rule'), trigger: 'blur' }]
 }
 
 /**

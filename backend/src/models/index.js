@@ -342,6 +342,21 @@ const StockSyncRecord = sequelize.define('StockSyncRecord', {
 }, { tableName: 'stock_sync_records', timestamps: false })
 
 /**
+ * SchedulerConfig model — table: scheduler_configs
+ * Cron task schedule configuration.
+ */
+const SchedulerConfig = sequelize.define('SchedulerConfig', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  task_key: { type: DataTypes.STRING(50), allowNull: false, unique: true },
+  task_name: { type: DataTypes.STRING(100), allowNull: false },
+  cron_expression: { type: DataTypes.STRING(50), allowNull: false },
+  enabled: { type: DataTypes.TINYINT, defaultValue: 1 },
+  description: { type: DataTypes.STRING(500), defaultValue: '' },
+  updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, { tableName: 'scheduler_configs', timestamps: false })
+
+/**
  * OptionWhitelist model — table: option_whitelist
  * Whitelist of stocks eligible for options trading.
  */
@@ -351,6 +366,11 @@ const OptionWhitelist = sequelize.define('OptionWhitelist', {
   market_type: { type: DataTypes.TINYINT, allowNull: false },
   stock_name: { type: DataTypes.STRING(100), allowNull: false },
   status: { type: DataTypes.TINYINT, defaultValue: 1 },
+  underlying_type: { type: DataTypes.TINYINT, defaultValue: 1 },
+  exchange: { type: DataTypes.STRING(10), defaultValue: '' },
+  underlying_code: { type: DataTypes.STRING(20), defaultValue: '' },
+  contract_multiplier: { type: DataTypes.INTEGER, defaultValue: 10000 },
+  exercise_type: { type: DataTypes.TINYINT, defaultValue: 1 },
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'option_whitelist', timestamps: false })
@@ -371,6 +391,16 @@ const OptionContract = sequelize.define('OptionContract', {
   contract_multiplier: { type: DataTypes.INTEGER, defaultValue: 100 },
   status: { type: DataTypes.TINYINT, defaultValue: 1 },
   underlying_price: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  exchange: { type: DataTypes.STRING(10), defaultValue: '' },
+  contract_name: { type: DataTypes.STRING(100), defaultValue: '' },
+  exercise_type: { type: DataTypes.TINYINT, defaultValue: 1 },
+  contract_code_sse: { type: DataTypes.STRING(20), defaultValue: '' },
+  contract_code_ctp: { type: DataTypes.STRING(50), defaultValue: '' },
+  prev_settle: { type: DataTypes.DECIMAL(12, 4), defaultValue: 0 },
+  listing_date: { type: DataTypes.DATEONLY },
+  last_trade_date: { type: DataTypes.DATEONLY },
+  delivery_date: { type: DataTypes.DATEONLY },
+  underlying_code: { type: DataTypes.STRING(20), defaultValue: '' },
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'option_contracts', timestamps: false })
@@ -428,12 +458,23 @@ const OptionPrice = sequelize.define('OptionPrice', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   contract_id: { type: DataTypes.INTEGER, allowNull: false },
   trade_date: { type: DataTypes.DATEONLY, allowNull: false },
-  premium: { type: DataTypes.DECIMAL(12, 4), allowNull: false },
-  intrinsic_value: { type: DataTypes.DECIMAL(12, 4), defaultValue: 0 },
-  time_value: { type: DataTypes.DECIMAL(12, 4), defaultValue: 0 },
+  premium: { type: DataTypes.DECIMAL(14, 4), allowNull: false },
+  intrinsic_value: { type: DataTypes.DECIMAL(14, 4), defaultValue: 0 },
+  time_value: { type: DataTypes.DECIMAL(14, 4), defaultValue: 0 },
+  settle: { type: DataTypes.DECIMAL(14, 4), defaultValue: 0 },
+  prev_settle: { type: DataTypes.DECIMAL(14, 4), defaultValue: 0 },
+  open_interest: { type: DataTypes.INTEGER, defaultValue: 0 },
+  volume: { type: DataTypes.INTEGER, defaultValue: 0 },
   delta: { type: DataTypes.DECIMAL(6, 4), defaultValue: 0 },
+  gamma: { type: DataTypes.DECIMAL(10, 6), defaultValue: 0 },
+  theta: { type: DataTypes.DECIMAL(10, 6), defaultValue: 0 },
+  vega: { type: DataTypes.DECIMAL(10, 6), defaultValue: 0 },
+  rho: { type: DataTypes.DECIMAL(10, 6), defaultValue: 0 },
   implied_volatility: { type: DataTypes.DECIMAL(6, 4), defaultValue: 0 },
-  underlying_price: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  underlying_price: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+  bid_price: { type: DataTypes.DECIMAL(12, 4), defaultValue: 0 },
+  ask_price: { type: DataTypes.DECIMAL(12, 4), defaultValue: 0 },
+  change_percent: { type: DataTypes.DECIMAL(8, 4), defaultValue: 0 },
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'option_prices', timestamps: false })
 
@@ -462,5 +503,6 @@ module.exports = {
   OptionContract,
   OptionPosition,
   OptionTransaction,
-  OptionPrice
+  OptionPrice,
+  SchedulerConfig
 }

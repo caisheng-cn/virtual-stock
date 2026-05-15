@@ -110,18 +110,10 @@ router.beforeEach((to, from) => {
   }
 })
 
-// Clear tokens when leaving authenticated routes to force re-authentication on return
 router.afterEach((to, from) => {
-  // Clear admin token when leaving admin routes
   if (from.path === '/admin' && to.path !== '/admin') {
     localStorage.removeItem('adminToken')
     localStorage.removeItem('adminId')
-  }
-  
-  // Clear regular user token when leaving authenticated routes
-  const authRoutes = ['/home', '/trade', '/positions', '/statistics', '/transactions', '/group', '/fund-flow', '/options']
-  if (authRoutes.includes(from.path) && !authRoutes.includes(to.path) && to.path !== '/login' && to.path !== '/register') {
-    localStorage.removeItem('token')
   }
 })
 

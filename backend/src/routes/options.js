@@ -3,10 +3,9 @@ const { Op } = require('sequelize')
 const { User, UserBalance, UserGroup, GroupMessage, OptionContract, OptionPosition, OptionTransaction, OptionPrice, OptionWhitelist, sequelize } = require('../models')
 const auth = require('../utils/auth')
 const optionService = require('../services/option')
-const { toCNY } = require('../utils/currency')
+const { isTradingHours, isAnyTradingHours } = require('../utils/marketTime')
 
 const router = express.Router()
-const OPTION_COMMISSION_RATE = 0.5
 
 async function broadcastOptionMessage(userId, mType, contract, quantity, price, premium, profit) {
   try {
@@ -15,19 +14,18 @@ async function broadcastOptionMessage(userId, mType, contract, quantity, price, 
     const typeLabels = { 5: '买入开仓', 6: '卖出平仓', 7: '行权', 8: '到期结算' }
     const label = typeLabels[mType] || ''
     const optLabel = contract.option_type === 'call' ? 'Call' : 'Put'
-    const cnyPremium = toCNY(premium, contract.market_type)
-    const content = `${label} ${contract.stock_code} ${contract.stock_name} | ${optLabel} 行权价${contract.strike_price} 到期${contract.expiration_date} | ${quantity}张 权利金¥${cnyPremium.toFixed(2)}`
+    const content = `${label} ${contract.stock_code || contract.underlying_code} ${contract.stock_name || contract.contract_name} | ${optLabel} 行权价${contract.strike_price} 到期${contract.expiration_date} | ${quantity}张 权利金¥${premium.toFixed(2)}`
     for (const ug of userGroups) {
       await GroupMessage.create({
         group_id: ug.group_id,
         user_id: userId,
         message_type: mType,
-        stock_code: contract.stock_code,
-        stock_name: contract.stock_name,
-        market_type: contract.market_type,
+        stock_code: contract.stock_code || contract.underlying_code,
+        stock_name: contract.stock_name || contract.contract_name,
+        market_type: contract.market_type || 1,
         shares: quantity,
         price: parseFloat(price),
-        amount: cnyPremium,
+        amount: premium,
         content,
         option_type: contract.option_type,
         strike_price: contract.strike_price,
@@ -46,35 +44,43 @@ async function broadcastOptionMessage(userId, mType, contract, quantity, price, 
 router.get('/whitelist', auth, async (req, res) => {
   try {
     const list = await OptionWhitelist.findAll({ where: { status: 1 }, raw: true })
-    res.json({ code: 0, data: list })
+    const result = list.map(w => ({
+      ...w,
+      isTradingHours: isTradingHours(w.exchange || 'SSE'),
+    }))
+    res.json({ code: 0, data: result })
   } catch (err) {
     res.json({ code: -1, message: err.message })
   }
 })
 
 /**
- * GET /api/v1/options/expirations - Get available expiration dates for a stock
+ * GET /api/v1/options/expirations - Get available expiration dates
  */
 router.get('/expirations', auth, async (req, res) => {
   try {
-    const { stock_code, market_type } = req.query
-    if (!stock_code || !market_type) {
+    const { stock_code, market_type, exchange } = req.query
+    if (!stock_code) {
       return res.json({ code: -1, message: res.t('trade.parameter_missing') })
     }
     const today = new Date().toISOString().split('T')[0]
+    const where = {
+      stock_code,
+      expiration_date: { [Op.gte]: today },
+      status: 1
+    }
+    if (exchange) where.exchange = exchange
     const rows = await OptionContract.findAll({
-      where: {
-        stock_code,
-        market_type: parseInt(market_type),
-        expiration_date: { [Op.gte]: today },
-        status: 1
-      },
-      attributes: ['expiration_date'],
-      group: ['expiration_date'],
+      where,
+      attributes: ['expiration_date', 'exchange'],
+      group: ['expiration_date', 'exchange'],
       order: [['expiration_date', 'ASC']],
       raw: true
     })
-    const dates = rows.map(r => r.expiration_date)
+    const dates = rows.map(r => ({
+      date: r.expiration_date,
+      exchange: r.exchange || '',
+    }))
     res.json({ code: 0, data: dates })
   } catch (err) {
     res.json({ code: -1, message: err.message })
@@ -82,42 +88,46 @@ router.get('/expirations', auth, async (req, res) => {
 })
 
 /**
- * GET /api/v1/options/contracts - Get option chain for a stock
+ * GET /api/v1/options/contracts - Get option chain
  */
 router.get('/contracts', auth, async (req, res) => {
   try {
-    const { stock_code, market_type, expiration } = req.query
-    if (!stock_code || !market_type) {
+    const { stock_code, market_type, expiration, exchange } = req.query
+    if (!stock_code) {
       return res.json({ code: -1, message: res.t('trade.parameter_missing') })
     }
-    let chain = await optionService.getOptionChain(stock_code, parseInt(market_type), expiration || null)
+    let chain = await optionService.getOptionChain(stock_code, parseInt(market_type || 1), expiration || null)
     if (!chain) {
       const whitelist = await OptionWhitelist.findOne({
-        where: { stock_code, market_type: parseInt(market_type), status: 1 },
+        where: { stock_code, status: 1 },
         raw: true
       })
-      if (!whitelist) {
-        return res.json({ code: -1, message: '该股票不在期权标的白名单中' })
+      if (whitelist) {
+        const underlyingPrice = await optionService.getUnderlyingPrice(stock_code, parseInt(market_type || 1))
+        if (underlyingPrice) {
+          await optionService.ensureContracts(stock_code, parseInt(market_type || 1))
+          await optionService.refreshPrices(stock_code, parseInt(market_type || 1))
+          chain = await optionService.getOptionChain(stock_code, parseInt(market_type || 1), expiration || null)
+        }
       }
-      const underlyingPrice = await optionService.getUnderlyingPrice(stock_code, parseInt(market_type))
-      if (!underlyingPrice) {
-        return res.json({ code: -1, message: '无法获取标的股价' })
-      }
-      await optionService.ensureContracts(stock_code, parseInt(market_type), whitelist.stock_name, underlyingPrice)
-      await optionService.refreshPrices(stock_code, parseInt(market_type))
-      chain = await optionService.getOptionChain(stock_code, parseInt(market_type), expiration || null)
     }
     if (!chain) {
       return res.json({ code: -1, message: '暂无可用合约' })
     }
-    res.json({ code: 0, data: chain })
+    res.json({
+      code: 0,
+      data: {
+        ...chain,
+        isTradingHours: isAnyTradingHours(),
+      }
+    })
   } catch (err) {
     res.json({ code: -1, message: err.message })
   }
 })
 
 /**
- * POST /api/v1/options/buy - Buy to open an option position
+ * POST /api/v1/options/buy - Buy to open
  */
 router.post('/buy', auth, async (req, res) => {
   const t = await sequelize.transaction()
@@ -143,10 +153,10 @@ router.post('/buy', auth, async (req, res) => {
     })
     if (!priceRow) return res.json({ code: -1, message: '暂无报价，请稍后再试' })
 
-    const premium = parseFloat(priceRow.premium) * quantity * (contract.contract_multiplier || 100)
-    const premiumCNY = toCNY(premium, contract.market_type)
-    const commission = Math.round(premiumCNY * OPTION_COMMISSION_RATE / 1000 * 100) / 100
-    const totalDeduct = premiumCNY + commission
+    const multiplier = contract.contract_multiplier || 10000
+    const premium = parseFloat(priceRow.premium) * quantity * multiplier
+    const commission = Math.round(premium * optionService.OPTION_COMMISSION_RATE / 1000 * 100) / 100
+    const totalDeduct = premium + commission
 
     let balance = await UserBalance.findOne({ where: { user_id: req.userId, group_id: groupIdParam || 0 } })
     if (!balance) balance = await UserBalance.findOne({ where: { user_id: req.userId } })
@@ -169,14 +179,13 @@ router.post('/buy', auth, async (req, res) => {
         avg_cost: newTotalCost / newQty
       }, { where: { id: existingPos.id }, transaction: t })
     } else {
-      const totalCostCNY = premiumCNY + commission
       await OptionPosition.create({
         user_id: req.userId,
         group_id: actualGroupId,
         contract_id,
         quantity,
-        avg_cost: totalCostCNY / quantity,
-        total_cost: totalCostCNY,
+        avg_cost: (premium + commission) / quantity,
+        total_cost: premium + commission,
         status: 1
       }, { transaction: t })
     }
@@ -189,17 +198,17 @@ router.post('/buy', auth, async (req, res) => {
       user_id: req.userId,
       group_id: actualGroupId,
       contract_id,
-      stock_code: contract.stock_code,
-      stock_name: contract.stock_name,
+      stock_code: contract.stock_code || contract.underlying_code,
+      stock_name: contract.stock_name || contract.contract_name,
       option_type: contract.option_type,
       strike_price: contract.strike_price,
       expiration_date: contract.expiration_date,
       trade_type: 1,
       quantity,
       price: parseFloat(priceRow.premium),
-      premium: premiumCNY,
+      premium,
       commission,
-      commission_rate: OPTION_COMMISSION_RATE,
+      commission_rate: optionService.OPTION_COMMISSION_RATE,
       balance_after: balanceAfter,
       trade_date: today,
       status: 1
@@ -217,7 +226,7 @@ router.post('/buy', auth, async (req, res) => {
         expiration: contract.expiration_date,
         quantity,
         price: parseFloat(priceRow.premium),
-        premium: premiumCNY,
+        premium,
         commission,
         totalDeduct,
         balanceAfter,
@@ -231,7 +240,7 @@ router.post('/buy', auth, async (req, res) => {
 })
 
 /**
- * POST /api/v1/options/sell - Sell to close an option position
+ * POST /api/v1/options/sell - Sell to close
  */
 router.post('/sell', auth, async (req, res) => {
   const t = await sequelize.transaction()
@@ -254,11 +263,11 @@ router.post('/sell', auth, async (req, res) => {
     const priceRow = await OptionPrice.findOne({ where: { contract_id: contract.id, trade_date: today }, raw: true })
     if (!priceRow) return res.json({ code: -1, message: '暂无报价' })
 
+    const multiplier = contract.contract_multiplier || 10000
     const sellPrice = parseFloat(priceRow.premium)
-    const premiumReceived = sellPrice * quantity * (contract.contract_multiplier || 100)
-    const premiumReceivedCNY = toCNY(premiumReceived, contract.market_type)
-    const commission = Math.round(premiumReceivedCNY * OPTION_COMMISSION_RATE / 1000 * 100) / 100
-    const netAmount = premiumReceivedCNY - commission
+    const premiumReceived = sellPrice * quantity * multiplier
+    const commission = Math.round(premiumReceived * optionService.OPTION_COMMISSION_RATE / 1000 * 100) / 100
+    const netAmount = premiumReceived - commission
 
     const costPerUnit = parseFloat(position.total_cost) / position.quantity
     const costOfSold = costPerUnit * quantity
@@ -284,17 +293,17 @@ router.post('/sell', auth, async (req, res) => {
       user_id: req.userId,
       group_id: position.group_id,
       contract_id: contract.id,
-      stock_code: contract.stock_code,
-      stock_name: contract.stock_name,
+      stock_code: contract.stock_code || contract.underlying_code,
+      stock_name: contract.stock_name || contract.contract_name,
       option_type: contract.option_type,
       strike_price: contract.strike_price,
       expiration_date: contract.expiration_date,
       trade_type: 2,
       quantity,
       price: sellPrice,
-      premium: premiumReceivedCNY,
+      premium: premiumReceived,
       commission,
-      commission_rate: OPTION_COMMISSION_RATE,
+      commission_rate: optionService.OPTION_COMMISSION_RATE,
       profit,
       balance_after: balanceAfter,
       trade_date: today,
@@ -309,7 +318,7 @@ router.post('/sell', auth, async (req, res) => {
         positionId: position.id,
         quantity,
         sellPrice,
-        premiumReceived: premiumReceivedCNY,
+        premiumReceived,
         costBasis: costOfSold,
         profit,
         commission,
@@ -325,7 +334,7 @@ router.post('/sell', auth, async (req, res) => {
 })
 
 /**
- * POST /api/v1/options/exercise - Exercise an option position early
+ * POST /api/v1/options/exercise - Exercise an option
  */
 router.post('/exercise', auth, async (req, res) => {
   const t = await sequelize.transaction()
@@ -344,13 +353,22 @@ router.post('/exercise', auth, async (req, res) => {
 
     const contract = await OptionContract.findByPk(position.contract_id)
     if (!contract) return res.json({ code: -1, message: '合约不存在' })
-    const today = new Date().toISOString().split('T')[0]
 
-    const underlyingPrice = await optionService.getUnderlyingPrice(contract.stock_code, contract.market_type)
+    // 欧式期权不允许提前行权
+    if (contract.exercise_type === 2) {
+      return res.json({ code: -1, message: '该期权为欧式行权，到期自动结算，不支持提前行权' })
+    }
+
+    const today = new Date().toISOString().split('T')[0]
+    const underlyingPrice = await optionService.getUnderlyingPrice(
+      contract.stock_code || contract.underlying_code,
+      contract.market_type,
+      contract.exchange
+    )
     if (!underlyingPrice) return res.json({ code: -1, message: '无法获取标的股价' })
 
     const strike = parseFloat(contract.strike_price)
-    const multiplier = contract.contract_multiplier || 100
+    const multiplier = contract.contract_multiplier || 10000
     let settlementAmount = 0
     if (contract.option_type === 'call') {
       settlementAmount = Math.max(underlyingPrice - strike, 0) * quantity * multiplier
@@ -360,13 +378,12 @@ router.post('/exercise', auth, async (req, res) => {
     if (settlementAmount <= 0) {
       return res.json({ code: -1, message: '该期权目前为虚值，行权无收益' })
     }
-    const settlementCNY = toCNY(settlementAmount, contract.market_type)
 
     const costPerUnit = parseFloat(position.total_cost) / position.quantity
     const costOfExercised = costPerUnit * quantity
-    const profit = settlementCNY - costOfExercised
+    const profit = settlementAmount - costOfExercised
 
-    await UserBalance.increment('cash', { by: settlementCNY, where: { user_id: req.userId, group_id: position.group_id }, transaction: t })
+    await UserBalance.increment('cash', { by: settlementAmount, where: { user_id: req.userId, group_id: position.group_id }, transaction: t })
     const currentBalance = await UserBalance.findOne({ where: { user_id: req.userId, group_id: position.group_id }, transaction: t })
     const balanceAfter = currentBalance ? parseFloat(currentBalance.cash) : 0
 
@@ -386,25 +403,25 @@ router.post('/exercise', auth, async (req, res) => {
       user_id: req.userId,
       group_id: position.group_id,
       contract_id: contract.id,
-      stock_code: contract.stock_code,
-      stock_name: contract.stock_name,
+      stock_code: contract.stock_code || contract.underlying_code,
+      stock_name: contract.stock_name || contract.contract_name,
       option_type: contract.option_type,
       strike_price: strike,
       expiration_date: contract.expiration_date,
       trade_type: 3,
       quantity,
       price: underlyingPrice,
-      premium: settlementCNY,
+      premium: settlementAmount,
       commission: 0,
       profit,
       balance_after: balanceAfter,
       trade_date: today,
-      settlement_amount: settlementCNY,
+      settlement_amount: settlementAmount,
       status: 1
     }, { transaction: t })
 
     await t.commit()
-    broadcastOptionMessage(req.userId, 7, contract, quantity, 0, settlementCNY, profit)
+    broadcastOptionMessage(req.userId, 7, contract, quantity, 0, settlementAmount, profit)
     res.json({
       code: 0,
       data: {
@@ -413,7 +430,7 @@ router.post('/exercise', auth, async (req, res) => {
         optionType: contract.option_type,
         strikePrice: strike,
         underlyingPrice,
-        settlementAmount: settlementCNY,
+        settlementAmount,
         costBasis: costOfExercised,
         profit,
         balanceAfter,
@@ -445,7 +462,7 @@ router.get('/positions', auth, async (req, res) => {
 })
 
 /**
- * GET /api/v1/options/transactions - Option transaction history
+ * GET /api/v1/options/transactions - Transaction history
  */
 router.get('/transactions', auth, async (req, res) => {
   try {

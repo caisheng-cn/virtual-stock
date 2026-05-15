@@ -1,0 +1,1 @@
+import e from"./request-B5-5g1aQ.js";const d=(t,a,s,n,r)=>e.get("/transactions",{params:{start_date:t,end_date:a,trade_type:s,page:n,pageSize:r}}),c=(t,a)=>e.get("/transactions/fund-flow",{params:{start_date:t,end_date:a}});export{c as a,d as g};

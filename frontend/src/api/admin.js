@@ -316,3 +316,9 @@ export const deleteOptionWhitelist = (id) => request.delete(`/admin/options/whit
 export const toggleOptionWhitelistStatus = (id, status) => request.put(`/admin/options/whitelist/${id}/status`, { status })
 export const getOptionContracts = (params) => request.get('/admin/options/contracts', { params })
 export const generateOptionContracts = (data) => request.post('/admin/options/contracts/generate', data)
+export const syncOptionData = (action) => request.post('/admin/options/sync', { action }, { timeout: 300000 })
+export const getSyncProgress = () => request.get('/admin/options/sync/progress')
+
+export const getSchedulerConfigs = () => request.get('/admin/scheduler/configs')
+export const updateSchedulerConfig = (id, data) => request.put(`/admin/scheduler/configs/${id}`, data)
+export const reloadScheduler = () => request.post('/admin/scheduler/reload')
