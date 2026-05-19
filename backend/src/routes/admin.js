@@ -13,7 +13,7 @@
 const express = require('express')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
-const { sequelize, AdminUser, Group, User, UserGroup, UserBalance, Position, Transaction, StockPool, StockPricesCache, InviteCode, CommissionConfig, LoginHistory, MarketConfig, CommissionHistory, GroupMessage, StockSyncRecord, OptionWhitelist, OptionContract, OptionPrice, OptionPosition, SchedulerConfig } = require('../models')
+const { sequelize, AdminUser, Group, User, UserGroup, UserBalance, Position, Transaction, StockPool, StockPricesCache, InviteCode, CommissionConfig, LoginHistory, MarketConfig, CommissionHistory, GroupMessage, StockSyncRecord, OptionWhitelist, OptionContract, OptionPrice, OptionPosition, SchedulerConfig, AiLlmConfig, AiTradeLog, AdminAnnouncement } = require('../models')
 const optionService = require('../services/option')
 const optionSync = require('../services/optionSync')
 const syncProgress = require('../services/syncProgress')
@@ -1131,19 +1131,19 @@ router.get('/market-config', async (req, res) => {
 
 /**
  * PUT /api/v1/admin/market-config/:id
- * Update market configuration (refresh_time, trade_start, trade_end, enabled).
- * Body: { refresh_time?, trade_start?, trade_end?, enabled? }
+ * Update market configuration (refresh_time, forbid_start, forbid_end, enabled).
+ * Body: { refresh_time?, forbid_start?, forbid_end?, enabled? }
  * Response: { code, message }
  */
 router.put('/market-config/:id', async (req, res) => {
   try {
-    const { refresh_time, trade_start, trade_end, enabled } = req.body
+    const { refresh_time, forbid_start, forbid_end, enabled } = req.body
     const config = await MarketConfig.findByPk(req.params.id)
     if (!config) {
       return res.json({ code: -1, message: '配置不存在' })
     }
 
-    await config.update({ refresh_time, trade_start, trade_end, enabled })
+    await config.update({ refresh_time, forbid_start, forbid_end, enabled })
     res.json({ code: 0, message: '更新成功' })
   } catch (err) {
     res.json({ code: -1, message: err.message })
@@ -1768,6 +1768,326 @@ router.post('/scheduler/reload', async (req, res) => {
     res.json({ code: 0, message: '调度器已重载' })
   } catch (err) {
     res.json({ code: -1, message: err.message })
+  }
+})
+
+// ============================================
+// AI 配置管理
+// ============================================
+
+/**
+ * GET /api/v1/admin/ai/config - 获取所有LLM配置
+ */
+router.get('/ai/config', async (req, res) => {
+  try {
+    const configs = await AiLlmConfig.findAll({ order: [['id', 'ASC']], raw: true })
+    const safe = configs.map(c => ({
+      ...c,
+      api_key: c.api_key ? '***' : '',
+      personality_prompts: c.personality_prompts ? JSON.parse(c.personality_prompts) : null
+    }))
+    res.json({ code: 0, data: safe })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/ai/config - 新增LLM配置
+ */
+router.post('/ai/config', async (req, res) => {
+  try {
+    const { config_name, api_url, api_key, model_name, max_tokens, temperature, personality_prompts } = req.body
+    if (!config_name || !api_url || !api_key) {
+      return res.json({ code: -1, message: '参数不完整' })
+    }
+    const config = await AiLlmConfig.create({
+      config_name, api_url, api_key,
+      model_name: model_name || 'gpt-3.5-turbo',
+      max_tokens: parseInt(max_tokens) || 2000,
+      temperature: parseFloat(temperature) || 0.7,
+      personality_prompts: personality_prompts ? JSON.stringify(personality_prompts) : null
+    })
+    res.json({ code: 0, data: config })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * PUT /api/v1/admin/ai/config/:id - 更新LLM配置
+ */
+router.put('/ai/config/:id', async (req, res) => {
+  try {
+    const { config_name, api_url, api_key, model_name, max_tokens, temperature, status, personality_prompts } = req.body
+    const update = {}
+    if (config_name !== undefined) update.config_name = config_name
+    if (api_url !== undefined) update.api_url = api_url
+    if (api_key !== undefined) update.api_key = api_key
+    if (model_name !== undefined) update.model_name = model_name
+    if (max_tokens !== undefined) update.max_tokens = parseInt(max_tokens)
+    if (temperature !== undefined) update.temperature = parseFloat(temperature)
+    if (status !== undefined) update.status = parseInt(status)
+    if (personality_prompts !== undefined) update.personality_prompts = JSON.stringify(personality_prompts)
+
+    await AiLlmConfig.update(update, { where: { id: req.params.id } })
+    res.json({ code: 0, message: '更新成功' })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * DELETE /api/v1/admin/ai/config/:id - 删除LLM配置
+ */
+router.delete('/ai/config/:id', async (req, res) => {
+  try {
+    await AiLlmConfig.destroy({ where: { id: req.params.id } })
+    res.json({ code: 0, message: '删除成功' })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/ai/config/test - 测试LLM连接
+ */
+router.post('/ai/config/test', async (req, res) => {
+  try {
+    const { api_url, api_key, model_name } = req.body
+    if (!api_url || !api_key) {
+      return res.json({ code: -1, message: '参数不完整' })
+    }
+    const { testConnection } = require('../services/llmClient')
+    const result = await testConnection({ api_url, api_key, model_name: model_name || 'gpt-3.5-turbo' })
+    res.json({ code: result.success ? 0 : -1, data: result })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * GET /api/v1/admin/ai/users - 获取所有AI用户
+ */
+router.get('/ai/users', async (req, res) => {
+  try {
+    const aiUserService = require('../services/aiUserService')
+    const users = await aiUserService.getAllAIUsers()
+    res.json({ code: 0, data: users })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/ai/generate/:groupId - 为群组生成AI用户
+ */
+router.post('/ai/generate/:groupId', async (req, res) => {
+  try {
+    const { config_id } = req.body
+    const groupId = req.params.groupId
+    if (!config_id) {
+      return res.json({ code: -1, message: '请选择LLM配置' })
+    }
+    const aiUserService = require('../services/aiUserService')
+    const users = await aiUserService.generateAIUsers(parseInt(groupId), parseInt(config_id))
+    res.json({ code: 0, data: users })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/ai/regenerate/:groupId - 重新生成AI用户（先删后建）
+ */
+router.post('/ai/regenerate/:groupId', async (req, res) => {
+  try {
+    const { config_id } = req.body
+    const groupId = req.params.groupId
+    if (!config_id) {
+      return res.json({ code: -1, message: '请选择LLM配置' })
+    }
+    const aiUserService = require('../services/aiUserService')
+    await aiUserService.removeAIUsers(parseInt(groupId))
+    const users = await aiUserService.generateAIUsers(parseInt(groupId), parseInt(config_id))
+    res.json({ code: 0, data: users })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/ai/trigger - 手动触发一次AI交易
+ */
+router.post('/ai/trigger', async (req, res) => {
+  try {
+    const aiUsers = await User.findAll({
+      where: { is_ai: 1, status: 1, trade_enabled: 1 },
+      raw: true
+    })
+    const aiTrade = require('../services/aiTradeService')
+    const aiSocial = require('../services/aiSocialService')
+    const results = []
+    for (const user of aiUsers) {
+      const ug = await UserGroup.findOne({ where: { user_id: user.id }, raw: true })
+      if (!ug) continue
+      const tradeResult = await aiTrade.processAIUser(user.id, ug.group_id)
+      results.push({ userId: user.id, trade: tradeResult })
+      await new Promise(r => setTimeout(r, 1000))
+      const socialResult = await aiSocial.processAISocialInteraction(user.id, ug.group_id)
+      results[results.length - 1].social = socialResult
+      await new Promise(r => setTimeout(r, 500))
+    }
+    res.json({ code: 0, data: results })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * PUT /api/v1/admin/ai/users/:id - 编辑AI用户昵称
+ */
+router.put('/ai/users/:id', async (req, res) => {
+  try {
+    const { nickname } = req.body
+    if (!nickname) {
+      return res.json({ code: -1, message: '昵称不能为空' })
+    }
+    const user = await User.findByPk(req.params.id)
+    if (!user || !user.is_ai) {
+      return res.json({ code: -1, message: 'AI用户不存在' })
+    }
+    await User.update({ nickname }, { where: { id: req.params.id } })
+    res.json({ code: 0, message: '昵称已更新' })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * GET /api/v1/admin/ai/logs - 查看AI交易日志
+ */
+router.get('/ai/logs', async (req, res) => {
+  try {
+    const { page = 1, pageSize = 20, user_id } = req.query
+    const where = {}
+    if (user_id) where.user_id = user_id
+
+    const { count, rows } = await AiTradeLog.findAndCountAll({
+      where,
+      order: [['id', 'DESC']],
+      limit: parseInt(pageSize),
+      offset: (parseInt(page) - 1) * parseInt(pageSize),
+      raw: true
+    })
+
+    const userIds = [...new Set(rows.map(r => r.user_id))]
+    const users = userIds.length > 0
+      ? await User.findAll({ where: { id: userIds }, attributes: ['id', 'username', 'nickname'], raw: true })
+      : []
+    const userMap = {}
+    for (const u of users) userMap[u.id] = u
+
+    const list = rows.map(r => ({
+      ...r,
+      username: userMap[r.user_id]?.username || '',
+      nickname: userMap[r.user_id]?.nickname || ''
+    }))
+
+    res.json({ code: 0, data: { list, total: count } })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * GET /api/v1/admin/announcement
+ * Get the current admin announcement.
+ * Response: { code, data: AdminAnnouncement|null }
+ */
+router.get('/announcement', async (req, res) => {
+  try {
+    const ann = await AdminAnnouncement.findOne({ order: [['id', 'DESC']] })
+    res.json({ code: 0, data: ann })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * PUT /api/v1/admin/announcement
+ * Create or update the admin announcement.
+ * Body: { content_zh_cn?, content_zh_tw?, content_en?, enabled? }
+ */
+router.put('/announcement', async (req, res) => {
+  try {
+    const { content_zh_cn, content_zh_tw, content_en, enabled } = req.body
+    let ann = await AdminAnnouncement.findOne({ order: [['id', 'DESC']] })
+    if (ann) {
+      const updates = {}
+      if (content_zh_cn !== undefined) updates.content_zh_cn = content_zh_cn
+      if (content_zh_tw !== undefined) updates.content_zh_tw = content_zh_tw
+      if (content_en !== undefined) updates.content_en = content_en
+      if (enabled !== undefined) updates.enabled = enabled
+      await ann.update(updates)
+    } else {
+      ann = await AdminAnnouncement.create({
+        content_zh_cn: content_zh_cn || '',
+        content_zh_tw: content_zh_tw || '',
+        content_en: content_en || '',
+        enabled: enabled !== undefined ? enabled : 1
+      })
+    }
+    res.json({ code: 0, data: ann, message: '保存成功' })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * POST /api/v1/admin/announcement/translate
+ * Translate announcement content to other languages using LLM.
+ * Body: { source_lang, content } where source_lang is 'zh_cn', 'zh_tw', or 'en'
+ * Response: { code, data: { content_zh_cn, content_zh_tw, content_en } }
+ */
+router.post('/announcement/translate', async (req, res) => {
+  try {
+    const { source_lang, content } = req.body
+    if (!content) {
+      return res.json({ code: -1, message: '请提供要翻译的内容' })
+    }
+
+    const config = await AiLlmConfig.findOne({ where: { status: 1 }, order: [['id', 'ASC']] })
+    if (!config) {
+      return res.json({ code: -1, message: '请先配置并启用 LLM' })
+    }
+
+    const langNames = { zh_cn: '简体中文', zh_tw: '繁體中文', en: 'English' }
+    const targets = ['zh_cn', 'zh_tw', 'en'].filter(l => l !== source_lang)
+    const targetNames = targets.map(l => langNames[l]).join('、')
+
+    const { callLLM } = require('../services/llmClient')
+    const result = await callLLM(config, [
+      { role: 'system', content: `你是一个翻译助手。将${langNames[source_lang]}内容翻译成${targetNames}。直接返回翻译结果，不要解释，不要加任何前缀后缀。使用JSON格式。` },
+      { role: 'user', content: `请将以下${langNames[source_lang]}内容翻译成${targetNames}，返回JSON格式：\n{\n${targets.map(t => `  "${t}": ""`).join(',\n')}\n}\n\n内容：${content}` }
+    ], { maxTokens: 4096, temperature: 0.3 })
+
+    let translated
+    try {
+      translated = JSON.parse(result.content)
+    } catch {
+      return res.json({ code: -1, message: 'LLM 返回格式异常，请重试' })
+    }
+
+    const response = { content_zh_cn: '', content_zh_tw: '', content_en: '' }
+    response[`content_${source_lang}`] = content
+    for (const t of targets) {
+      response[`content_${t}`] = translated[t] || ''
+    }
+
+    res.json({ code: 0, data: response })
+  } catch (err) {
+    res.json({ code: -1, message: err.message || '翻译失败' })
   }
 })
 

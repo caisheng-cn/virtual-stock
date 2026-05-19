@@ -16,5 +16,4 @@ INSERT IGNORE INTO scheduler_configs (task_key, task_name, cron_expression, enab
 ('option_contract_sync', '同步期权合约', '50 8 * * 1-5', 1, '每个交易日 08:50 从 AKShare 同步全量合约列表'),
 ('option_price_sync', '同步实时行情', '*/5 9,10,11,13,14 * * 1-5', 1, '交易时段每5分钟刷新期权实时报价'),
 ('option_daily_close', '同步收盘数据', '5 15 * * 1-5', 1, '每个交易日 15:05 同步日线收盘价和 Greeks'),
-('option_settlement', '到期自动结算', '10 15 * * 1-5', 1, '每个交易日 15:10 自动结算当日到期的实值期权'),
-('stock_data_sync', '同步股票数据', '0 9 * * 1-5', 1, '每个交易日 09:00 同步 A 股/港股/美股日线数据');
+('option_settlement', '到期自动结算', '10 15 * * 1-5', 1, '每个交易日 15:10 自动结算当日到期的实值期权');

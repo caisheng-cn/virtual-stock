@@ -88,28 +88,36 @@ const checkTradeEnabled = async (user, res) => {
  }
 
 /**
- * Check if the current time is within the allowed trading window for a market type.
- * If the market config has trading time restrictions disabled, the check is skipped.
+ * Check if the current time falls within the forbidden trading window for a market type.
+ * If the market config has the restriction disabled, the check is skipped.
+ * Supports cross-day forbidden periods (e.g. forbid_start=20:00, forbid_end=05:00).
  * @param {number} marketType - Market type
  * @param {import('express').Response} res - Express response object
- * @returns {Promise<Object|null>} JSON response if outside trading hours, null if allowed
+ * @returns {Promise<Object|null>} JSON response if within forbidden period, null if allowed
  */
 const checkTradeTime = async (marketType, res) => {
    const config = await MarketConfig.findOne({ where: { market_type: marketType } })
    if (!config) {
      return res.json({ code: -1, message: res.t('trade.market_config_missing') })
    }
-   // If trading time restriction is disabled (enabled: 0), skip time check
+   // If trading time restriction is disabled (enabled: 0), skip check
    if (config.enabled === 0) {
      return null
    }
-   // If enabled, check time
    const now = new Date()
-   // Format current time as HH:mm (24-hour)
    const currentTime = now.toTimeString().slice(0, 5)
-   // Assuming trade_start and trade_end are in HH:mm format
-   if (currentTime < config.trade_start || currentTime > config.trade_end) {
-     return res.json({ code: -1, message: res.t('trade.trade_disabled_time') })
+   const fs = config.forbid_start
+   const fe = config.forbid_end
+   if (fs <= fe) {
+     // Same-day forbidden period
+     if (currentTime >= fs && currentTime <= fe) {
+       return res.json({ code: -1, message: res.t('trade.trade_disabled_time') })
+     }
+   } else {
+     // Cross-day forbidden period (e.g. 20:00 - 05:00)
+     if (currentTime >= fs || currentTime <= fe) {
+       return res.json({ code: -1, message: res.t('trade.trade_disabled_time') })
+     }
    }
    return null
  }
@@ -124,16 +132,17 @@ const checkTradeTime = async (marketType, res) => {
 router.post('/buy', auth, async (req, res) => {
    const t = await sequelize.transaction()
    try {
-      const { stock_code, market_type, shares, group_id: groupIdParam } = req.body
+      const { stock_code, market_type, group_id: groupIdParam } = req.body
+      const shares = parseInt(req.body.shares) || 0
       const group_id = groupIdParam ? parseInt(groupIdParam) : 0
      if (!stock_code || !market_type || !shares) {
-       return res.json({ code: -1, message: res.t('trade.parameter_missing') })
-     }
+        return res.json({ code: -1, message: res.t('trade.parameter_missing') })
+      }
 
      const user = await User.findByPk(req.userId)
-     if (!user) {
-       return res.json({ code: -1, message: res.t('auth.user_not_found') })
-     }
+      if (!user) {
+        return res.json({ code: -1, message: res.t('auth.user_not_found') })
+      }
     const check = await checkTradeEnabled(user, res)
     if (check) return
 
@@ -162,7 +171,7 @@ router.post('/buy', auth, async (req, res) => {
 
      const today = new Date().toISOString().split('T')[0]
 
-     const existingPosition = await Position.findOne({ where: { user_id: req.userId, stock_code, group_id: { [Op.in]: [group_id, 0] } } })
+     const existingPosition = await Position.findOne({ where: { user_id: req.userId, stock_code, group_id: { [Op.in]: [actualGroupId, 0] } } })
     if (existingPosition) {
       const newShares = existingPosition.shares + shares
       const newTotalCost = parseFloat(existingPosition.total_cost) + amount + commission
@@ -244,7 +253,8 @@ router.post('/buy', auth, async (req, res) => {
 router.post('/sell', auth, async (req, res) => {
    const t = await sequelize.transaction()
    try {
-      const { stock_code, market_type, shares, group_id: groupIdParam } = req.body
+      const { stock_code, market_type, group_id: groupIdParam } = req.body
+      const shares = parseInt(req.body.shares) || 0
       const group_id = groupIdParam ? parseInt(groupIdParam) : 0
       if (!stock_code || !market_type || !shares) {
         return res.json({ code: -1, message: res.t('trade.parameter_missing') })
@@ -277,60 +287,65 @@ router.post('/sell', auth, async (req, res) => {
      }
      const actualGroupId = balance.group_id
 
-      const position = await Position.findOne({ where: { user_id: req.userId, stock_code, group_id: { [Op.in]: [group_id, 0] } } })
-     if (!position || position.shares < shares) {
-       return res.json({ code: -1, message: res.t('trade.position_not_enough') })
+     const position = await Position.findOne({ where: { user_id: req.userId, stock_code, group_id: { [Op.in]: [actualGroupId, 0] } } })
+
+      const heldShares = Number(position?.shares) || 0
+      if (!position || heldShares < shares) {
+        return res.json({ code: -1, message: res.t('trade.position_not_enough') })
+      }
+
+      if (shares > heldShares) {
+        return res.json({ code: -1, message: res.t('trade.position_not_enough') })
+      }
+
+     const avgCost = parseFloat(position.avg_cost)
+     const realizedProfit = netAmount - (shares * avgCost)
+
+     const today = new Date().toISOString().split('T')[0]
+
+     const costToDecrement = heldShares === shares
+       ? parseFloat(position.total_cost)
+       : (parseFloat(position.avg_cost) * shares)
+
+      await UserBalance.increment('cash', { by: netAmount, where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
+      await UserBalance.decrement('total_cost', { by: costToDecrement, where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
+
+     if (heldShares === shares) {
+       await Position.destroy({ where: { id: position.id }, transaction: t })
+     } else {
+       const newShares = heldShares - shares
+       const newTotalCost = parseFloat(position.total_cost) - costToDecrement
+       const newAvgCost = newTotalCost / newShares
+       await Position.update({
+         shares: newShares,
+         avg_cost: newAvgCost,
+         total_cost: newTotalCost
+       }, { where: { id: position.id }, transaction: t })
      }
 
-    const avgCost = parseFloat(position.avg_cost)
-    const realizedProfit = netAmount - (shares * avgCost)
+      const currentBalance = await UserBalance.findOne({ where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
+      const balanceAfterSell = currentBalance ? parseFloat(currentBalance.cash) : 0
 
-    const today = new Date().toISOString().split('T')[0]
+      await Transaction.create({
+        user_id: req.userId,
+        group_id: actualGroupId,
+       stock_code,
+       stock_name: quote.stockName,
+       market_type,
+       trade_type: 2,
+       price: quote.price,
+       shares,
+       amount,
+       commission,
+       commission_rate: commissionRate,
+       balance_after: balanceAfterSell,
+       trade_date: today,
+       status: 1,
+       profit: realizedProfit
+      }, { transaction: t })
 
-    const sharesToDecrement = shares
-    const costToDecrement = position.shares === shares 
-      ? parseFloat(position.total_cost) 
-      : (parseFloat(position.avg_cost) * shares)
-
-     await UserBalance.increment('cash', { by: netAmount, where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
-     await UserBalance.decrement('total_cost', { by: costToDecrement, where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
-
-    if (position.shares === shares) {
-      await Position.destroy({ where: { id: position.id }, transaction: t })
-    } else {
-      const newShares = position.shares - shares
-      const newTotalCost = parseFloat(position.total_cost) - costToDecrement
-      const newAvgCost = newTotalCost / newShares
-      await Position.update({
-        shares: newShares,
-        avg_cost: newAvgCost,
-        total_cost: newTotalCost
-      }, { where: { id: position.id }, transaction: t })
-    }
-
-     const currentBalance = await UserBalance.findOne({ where: { user_id: req.userId, group_id: actualGroupId }, transaction: t })
-     const balanceAfterSell = currentBalance ? parseFloat(currentBalance.cash) : 0
-
-     await Transaction.create({
-       user_id: req.userId,
-       group_id: actualGroupId,
-      stock_code,
-      stock_name: quote.stockName,
-      market_type,
-      trade_type: 2,
-      price: quote.price,
-      shares,
-      amount,
-      commission,
-      commission_rate: commissionRate,
-      balance_after: balanceAfterSell,
-      trade_date: today,
-      status: 1,
-      profit: realizedProfit
-     }, { transaction: t })
-
-      await t.commit()
-      createGroupMessage(req.userId, 2, stock_code, quote.stockName, market_type, shares, quote.price, amount)
+       await t.commit()
+       createGroupMessage(req.userId, 2, stock_code, quote.stockName, market_type, shares, quote.price, amount)
       res.json({
         code: 0,
         message: res.t('common.success'),

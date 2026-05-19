@@ -21,18 +21,18 @@ CREATE TABLE IF NOT EXISTS market_config (
   id INT PRIMARY KEY AUTO_INCREMENT,
   market_type TINYINT NOT NULL,
   refresh_time VARCHAR(10),
-  trade_start VARCHAR(10),
-  trade_end VARCHAR(10),
+  forbid_start VARCHAR(10),
+  forbid_end VARCHAR(10),
   enabled TINYINT DEFAULT 1,
   created_at DATETIME DEFAULT NOW(),
   UNIQUE KEY uk_market (market_type)
 );
 
 -- 初始化市场配置
-INSERT INTO market_config (market_type, refresh_time, trade_start, trade_end) VALUES
-(1, '09:00', '09:30', '15:00'),
-(2, '09:30', '09:30', '16:00'),
-(3, '04:00', '09:30', '16:00')
+INSERT INTO market_config (market_type, refresh_time, forbid_start, forbid_end) VALUES
+(1, '09:00', '15:00', '09:30'),
+(2, '09:30', '16:00', '09:30'),
+(3, '04:00', '04:00', '21:30')
 ON DUPLICATE KEY UPDATE refresh_time = VALUES(refresh_time);
 
 -- 4. 佣金历史表

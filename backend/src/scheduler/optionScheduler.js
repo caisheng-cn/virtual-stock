@@ -4,7 +4,8 @@
 const cron = require('cron')
 const optionSync = require('../services/optionSync')
 const optionService = require('../services/option')
-const { SchedulerConfig } = require('../models')
+const stockSync = require('../services/stockSync')
+const { SchedulerConfig, MarketConfig, StockSyncRecord } = require('../models')
 const { isTradingHours, isWeekend } = require('../utils/marketTime')
 
 const RUNNING = {}
@@ -61,23 +62,6 @@ const HANDLERS = {
     RUNNING.settlement = false
   },
 
-  stock_data_sync: async () => {
-    console.log('[调度器] 同步股票数据...')
-    try {
-      const { runPythonABatch, runPythonBatchHKAKShare, runPythonBatchUSAKShare } = require('../services/stock')
-      const { StockPool, StockPrice, StockPricesCache } = require('../models')
-      const stocks = await StockPool.findAll({ where: { status: 1 }, raw: true })
-      for (const market of [1, 2, 3]) {
-        const pool = stocks.filter(s => s.market_type === market)
-        if (!pool.length) continue
-        try {
-          if (market === 1) await runPythonABatch(pool)
-          else if (market === 2) await runPythonBatchHKAKShare(pool)
-          else if (market === 3) await runPythonBatchUSAKShare(pool)
-        } catch (e) { console.error(`[调度器] 市场${market}同步失败:`, e.message) }
-      }
-    } catch (e) { console.error('[调度器] 股票同步失败:', e.message) }
-  },
 }
 
 async function loadJobs() {
@@ -100,6 +84,40 @@ async function loadJobs() {
       console.log(`[调度器] 已启动: ${cfg.task_name} (${cfg.cron_expression})`)
     } catch (e) {
       console.error(`[调度器] 启动失败 ${cfg.task_name}: ${e.message}`)
+    }
+  }
+
+  const marketLabel = { 1: 'A股', 2: '港股', 3: '美股' }
+  const marketConfigs = await MarketConfig.findAll({ raw: true })
+  for (const cfg of marketConfigs) {
+    if (!cfg.refresh_time) continue
+    const [h, m] = cfg.refresh_time.split(':')
+    const taskKey = `stock_sync_${cfg.market_type}`
+    const cronExpr = `${m} ${h} * * 1-5`
+    const label = marketLabel[cfg.market_type] || `市场${cfg.market_type}`
+    const handler = async () => {
+      if (RUNNING[taskKey]) return
+      RUNNING[taskKey] = true
+      console.log(`[调度器] 同步${label}股票日线数据...`)
+      try {
+        const record = await StockSyncRecord.create({
+          market_type: cfg.market_type,
+          status: 'running',
+          started_at: new Date()
+        })
+        await stockSync.startSync(cfg.market_type, record.id)
+        console.log(`[调度器] ${label}股票同步完成`)
+      } catch (e) {
+        console.error(`[调度器] ${label}股票同步失败:`, e.message)
+      }
+      RUNNING[taskKey] = false
+    }
+    try {
+      const job = new cron.CronJob(cronExpr, handler, null, true)
+      JOBS[taskKey] = job
+      console.log(`[调度器] 已启动: ${label}股票同步 (${cronExpr})`)
+    } catch (e) {
+      console.error(`[调度器] 启动失败 ${label}股票同步: ${e.message}`)
     }
   }
 

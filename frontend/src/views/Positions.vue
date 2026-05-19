@@ -240,11 +240,24 @@ const confirmSell = async () => {
   if (!sellShares.value || sellShares.value < 1) {
     return ElMessage.warning(t('positions_page.enter_sell_shares'))
   }
+  const row = sellRow.value
+  const price = row.currentPrice || 0
+  const amount = price * sellShares.value
+  const msg = `${t('trade_page.stock_name')}: ${row.stockName || row.stockCode}\n${t('trade_page.shares')}: ${sellShares.value}\n${t('trade_page.current_price')}: ${formatMoney(price)} ${row.currency || ''}\n${t('trade_page.estimated_amount')}: ${formatMoney(amount)} ${row.currency || ''}`
+  try {
+    await ElMessageBox.confirm(msg, t('trade_page.confirm_trade'), {
+      confirmButtonText: t('trade_page.ok'),
+      cancelButtonText: t('common.cancel'),
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
   selling.value = true
   try {
     await sellStock({
-      stock_code: sellRow.value.stockCode,
-      market_type: sellRow.value.marketType,
+      stock_code: row.stockCode,
+      market_type: row.marketType,
       shares: sellShares.value
     })
     ElMessage.success(t('positions_page.sell_success'))

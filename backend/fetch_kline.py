@@ -131,6 +131,33 @@ def fetch_a_share_kline(symbol, start_date, end_date):
         return {'error': str(e)}
 
 
+def fetch_a_share_quote(symbol):
+    """Fetch A-share real-time quote via AKShare (East Money)."""
+    try:
+        import akshare as ak
+        df = ak.stock_zh_a_spot_em()
+        row = df[df['代码'] == symbol]
+        if row.empty:
+            return {'error': f'stock {symbol} not found'}
+        row = row.iloc[0]
+        volume_raw = row.get('成交量', 0) or 0
+        amount_raw = row.get('成交额', 0) or 0
+        return {
+            'stock_code': symbol,
+            'stock_name': str(row['名称']),
+            'price': round(float(row['最新价']), 2),
+            'prev_close': round(float(row['昨收']), 2),
+            'open_price': round(float(row['开盘价']), 2),
+            'high_price': round(float(row['最高价']), 2),
+            'low_price': round(float(row['最低价']), 2),
+            'volume': int(volume_raw),
+            'amount': round(float(amount_raw), 2),
+            'change_percent': round(float(row.get('涨跌幅', 0) or 0), 2)
+        }
+    except Exception as e:
+        return {'error': str(e)}
+
+
 def fetch_a_share_batch(stocks):
     """Fetch A-share K-line for multiple stocks via AKShare concurrently."""
     import concurrent.futures
@@ -158,6 +185,8 @@ if __name__ == '__main__':
         result = fetch_hk_kline_batch_akshare(args.get('stocks', []))
     elif action == 'us_kline_batch_akshare':
         result = fetch_us_kline_batch_akshare(args.get('stocks', []))
+    elif action == 'a_share_quote':
+        result = fetch_a_share_quote(args['symbol'])
     elif action == 'a_share':
         result = fetch_a_share_kline(args['symbol'], args['start_date'], args['end_date'])
     elif action == 'a_share_batch':

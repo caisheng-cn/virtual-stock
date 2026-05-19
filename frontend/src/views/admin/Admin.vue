@@ -45,6 +45,15 @@
           <el-menu-item index="scheduler">
             <span>定时任务</span>
           </el-menu-item>
+          <el-menu-item index="ai-config">
+            <span>AI 配置</span>
+          </el-menu-item>
+          <el-menu-item index="ai-users">
+            <span>AI 用户管理</span>
+          </el-menu-item>
+          <el-menu-item index="announcement">
+            <span>{{ $t('admin.announcement') }}</span>
+          </el-menu-item>
           <el-menu-item index="about">
             <span>{{ $t('admin.about') }}</span>
           </el-menu-item>
@@ -355,8 +364,8 @@
                 <template #default="{ row }">{{ getMarketLabel(row.market_type) }}</template>
               </el-table-column>
               <el-table-column prop="refresh_time" :label="$t('admin.refresh_time')" width="100" />
-              <el-table-column prop="trade_start" :label="$t('admin.trade_start')" width="100" />
-              <el-table-column prop="trade_end" :label="$t('admin.trade_end')" width="100" />
+              <el-table-column prop="forbid_start" :label="$t('admin.forbid_start')" width="100" />
+              <el-table-column prop="forbid_end" :label="$t('admin.forbid_end')" width="100" />
               <el-table-column :label="$t('admin.status')" width="80">
                 <template #default="{ row }">
                   <el-tag :type="row.enabled === 1 ? 'success' : 'info'">{{ row.enabled === 1 ? $t('common.normal') : $t('common.disabled') }}</el-tag>
@@ -697,6 +706,169 @@
           </el-card>
         </div>
 
+        <div v-if="activeMenu === 'announcement'" class="announcement-section">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>{{ $t('admin.announcement') }}</span>
+              </div>
+            </template>
+            <el-tabs v-model="announcementLangTab">
+              <el-tab-pane label="简体中文" name="zh_cn">
+                <el-input type="textarea" :rows="6" v-model="announcementForm.content_zh_cn" placeholder="请输入公告内容（简体中文）" />
+              </el-tab-pane>
+              <el-tab-pane label="繁體中文" name="zh_tw">
+                <el-input type="textarea" :rows="6" v-model="announcementForm.content_zh_tw" placeholder="請輸入公告內容（繁體中文）" />
+              </el-tab-pane>
+              <el-tab-pane label="English" name="en">
+                <el-input type="textarea" :rows="6" v-model="announcementForm.content_en" placeholder="Enter announcement content (English)" />
+              </el-tab-pane>
+            </el-tabs>
+            <div style="margin-top: 12px;">
+              <el-button type="primary" @click="translateAnnouncementContent" :loading="translating" :disabled="!announcementForm[`content_${announcementLangTab}`]">
+                🤖 {{ $t('admin.translate_to_others') }}
+              </el-button>
+            </div>
+            <div style="margin-top: 16px; display: flex; align-items: center; gap: 16px;">
+              <el-switch v-model="announcementForm.enabled" :active-value="1" :inactive-value="0" />
+              <span>{{ announcementForm.enabled === 1 ? $t('common.enabled') : $t('common.disabled') }}</span>
+              <el-button type="primary" @click="saveAnnouncementContent" :loading="savingAnnouncement">{{ $t('common.submit') }}</el-button>
+            </div>
+          </el-card>
+        </div>
+
+        <div v-if="activeMenu === 'ai-config'" class="ai-config">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>LLM 配置</span>
+                <el-button type="primary" @click="showAiConfigDialog = true; editingAiConfigId = null; Object.assign(aiConfigForm, { config_name: '', api_url: '', api_key: '', model_name: 'gpt-3.5-turbo', max_tokens: 2000, temperature: 0.7, personality_prompts: { ...DEFAULT_AI_PROMPTS } })">新增配置</el-button>
+              </div>
+            </template>
+            <el-table :data="aiConfigList" stripe v-loading="aiConfigLoading">
+              <el-table-column prop="id" label="ID" width="60" />
+              <el-table-column prop="config_name" label="名称" width="120" />
+              <el-table-column prop="api_url" label="接口地址" min-width="250" />
+              <el-table-column prop="api_key" label="API Key" width="120">
+                <template #default>****</template>
+              </el-table-column>
+              <el-table-column prop="model_name" label="模型" width="150" />
+              <el-table-column prop="max_tokens" label="Max Tokens" width="100" />
+              <el-table-column prop="temperature" label="Temperature" width="100" />
+              <el-table-column label="状态" width="80">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
+                    {{ row.status === 1 ? '启用' : '禁用' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="200" fixed="right">
+                <template #default="{ row }">
+                  <el-button size="small" @click="testAiConfig(row)">测试</el-button>
+                  <el-button size="small" @click="editAiConfig(row)">编辑</el-button>
+                  <el-button size="small" type="danger" @click="handleDeleteAiConfig(row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </div>
+
+        <div v-if="activeMenu === 'ai-users'" class="ai-users">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>AI 用户管理</span>
+                <div>
+                  <el-button type="primary" @click="handleTriggerAiTrade()" :loading="aiTriggering">手动触发交易</el-button>
+                </div>
+              </div>
+            </template>
+            <el-table :data="aiUserList" stripe v-loading="aiUserLoading">
+              <el-table-column prop="id" label="ID" width="60" />
+              <el-table-column prop="username" label="用户名" width="120" />
+              <el-table-column prop="nickname" label="昵称" width="140">
+                <template #default="{ row }">
+                  <template v-if="editingAiNicknameId === row.id">
+                    <el-input v-model="editingAiNickname" size="small" style="width: 100px" />
+                    <el-button size="small" type="primary" @click="saveAiNickname(row)">保存</el-button>
+                    <el-button size="small" @click="editingAiNicknameId = null">取消</el-button>
+                  </template>
+                  <span v-else>
+                    {{ row.nickname }}
+                    <el-button size="small" text @click="editAiNickname(row)">✏️</el-button>
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="personality" label="风格" width="80">
+                <template #default="{ row }">{{ row.personality === 'conservative' ? '保守型' : row.personality === 'aggressive' ? '激进型' : '随机型' }}</template>
+              </el-table-column>
+              <el-table-column prop="group_name" label="所属群组" width="120" />
+              <el-table-column prop="config_name" label="LLM配置" width="120" />
+              <el-table-column prop="init_cash" label="初始资金" width="100">
+                <template #default="{ row }">¥{{ formatMoney(row.init_cash) }}</template>
+              </el-table-column>
+              <el-table-column prop="cash" label="可用资金" width="100">
+                <template #default="{ row }">¥{{ formatMoney(row.cash) }}</template>
+              </el-table-column>
+              <el-table-column prop="daily_trade_count" label="今日交易" width="80" />
+              <el-table-column label="状态" width="70">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
+                    {{ row.status === 1 ? '正常' : '禁用' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+
+          <el-card style="margin-top: 16px">
+            <template #header>
+              <span>按群组管理 AI 用户</span>
+            </template>
+            <el-table :data="groupList" stripe>
+              <el-table-column prop="id" label="群组ID" width="80" />
+              <el-table-column prop="name" label="群组名称" />
+              <el-table-column label="当前AI用户" width="120">
+                <template #default="{ row }">
+                  {{ aiUserList.filter(u => u.group_id === row.id).length }} / 3
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="300">
+                <template #default="{ row }">
+                  <el-select v-model="aiGenerateConfigId" placeholder="选择LLM配置" size="small" style="width:140px;margin-right:8px">
+                    <el-option v-for="c in aiConfigList" :key="c.id" :label="c.config_name" :value="c.id" />
+                  </el-select>
+                  <el-button size="small" type="primary" @click="handleGenerateAiUsers(row.id)">生成</el-button>
+                  <el-button size="small" type="warning" @click="handleRegenerateAiUsers(row.id)">重新生成</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+
+          <el-card style="margin-top: 16px">
+            <template #header>
+              <span>AI 交易日志</span>
+            </template>
+            <el-table :data="aiLogList" stripe v-loading="aiLogLoading" max-height="400">
+              <el-table-column prop="id" label="ID" width="60" />
+              <el-table-column prop="nickname" label="用户" width="80" />
+              <el-table-column prop="interaction_type" label="类型" width="70">
+                <template #default="{ row }">{{ row.interaction_type === 'trade' ? '交易' : row.interaction_type === 'reply' ? '回复' : row.interaction_type === 'like' ? '点赞' : row.interaction_type }}</template>
+              </el-table-column>
+              <el-table-column prop="decision" label="决策" width="70">
+                <template #default="{ row }">{{ row.decision === 'buy' ? '买入' : row.decision === 'sell' ? '卖出' : row.decision === 'hold' ? '持有' : row.decision }}</template>
+              </el-table-column>
+              <el-table-column prop="stock_code" label="股票" width="80" />
+              <el-table-column prop="shares" label="股数" width="60" />
+              <el-table-column prop="reason" label="理由" min-width="250" show-overflow-tooltip />
+              <el-table-column prop="executed" label="执行" width="60">
+                <template #default="{ row }">{{ row.executed ? '是' : '否' }}</template>
+              </el-table-column>
+              <el-table-column prop="created_at" label="时间" width="160" />
+            </el-table>
+          </el-card>
+        </div>
+
         <div v-if="activeMenu === 'about'" class="about-section">
           <el-card>
             <template #header>
@@ -889,11 +1061,11 @@
         <el-form-item :label="$t('admin.refresh_time')">
           <el-input v-model="marketConfigForm.refresh_time" placeholder="HH:mm" />
         </el-form-item>
-        <el-form-item :label="$t('admin.trade_start_time')">
-          <el-input v-model="marketConfigForm.trade_start" placeholder="HH:mm" />
+        <el-form-item :label="$t('admin.forbid_start')">
+          <el-input v-model="marketConfigForm.forbid_start" placeholder="HH:mm" />
         </el-form-item>
-        <el-form-item :label="$t('admin.trade_end_time')">
-          <el-input v-model="marketConfigForm.trade_end" placeholder="HH:mm" />
+        <el-form-item :label="$t('admin.forbid_end')">
+          <el-input v-model="marketConfigForm.forbid_end" placeholder="HH:mm" />
         </el-form-item>
         <el-form-item :label="$t('admin.enabled_status')">
           <el-switch v-model="marketConfigForm.enabled" :active-value="1" :inactive-value="0" />
@@ -978,6 +1150,48 @@
       <template #footer>
         <el-button @click="showCommissionDialog = false">{{ $t('common.cancel') }}</el-button>
         <el-button type="primary" @click="saveCommission">{{ $t('common.submit') }}</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showAiConfigDialog" :title="editingAiConfigId ? '编辑 LLM 配置' : '新增 LLM 配置'" width="500px">
+      <el-form :model="aiConfigForm" label-width="120px">
+        <el-form-item label="配置名称">
+          <el-input v-model="aiConfigForm.config_name" placeholder="如：OpenAI GPT" />
+        </el-form-item>
+        <el-form-item label="接口地址">
+          <el-input v-model="aiConfigForm.api_url" placeholder="https://api.openai.com/v1" />
+        </el-form-item>
+        <el-form-item label="API Key">
+          <el-input v-model="aiConfigForm.api_key" type="password" show-password placeholder="sk-..." />
+        </el-form-item>
+        <el-form-item label="模型名称">
+          <el-input v-model="aiConfigForm.model_name" placeholder="gpt-3.5-turbo" />
+        </el-form-item>
+        <el-form-item label="Max Tokens">
+          <el-input-number v-model="aiConfigForm.max_tokens" :min="100" :max="262144" :step="100" />
+        </el-form-item>
+        <el-form-item label="Temperature">
+          <el-slider v-model="aiConfigForm.temperature" :min="0" :max="2" :step="0.1" style="width: 200px" />
+        </el-form-item>
+        <el-form-item label="风格提示词">
+          <div style="font-size:12px;color:#999;margin-bottom:8px">修改后将覆盖该风格 AI 用户的默认提示词，保存后即时生效</div>
+          <el-collapse style="width: 100%">
+            <el-collapse-item title="保守型 (conservative)" name="conservative">
+              <el-input v-model="aiConfigForm.personality_prompts.conservative" type="textarea" :rows="4" />
+            </el-collapse-item>
+            <el-collapse-item title="混合型 (random)" name="random">
+              <el-input v-model="aiConfigForm.personality_prompts.random" type="textarea" :rows="4" />
+            </el-collapse-item>
+            <el-collapse-item title="激进型 (aggressive)" name="aggressive">
+              <el-input v-model="aiConfigForm.personality_prompts.aggressive" type="textarea" :rows="4" />
+            </el-collapse-item>
+          </el-collapse>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAiConfigDialog = false">取消</el-button>
+        <el-button @click="testAiConfigForm" :loading="aiTesting">测试连接</el-button>
+        <el-button type="primary" @click="saveAiConfig">保存</el-button>
       </template>
     </el-dialog>
 
@@ -1209,8 +1423,14 @@ import { useRouter } from 'vue-router'
 import { i18n } from '@/i18n'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getStats, getGroups, createGroup as createGroupAPI, deleteGroup as deleteGroupAPI, getUsers, toggleUserStatus as toggleUserStatusAPI, deleteUser as deleteUserAPI, getStocks, getStockPositions, createStock as createStockAPI, deleteStock as deleteStockAPI, getInviteCodes, createInviteCode, getCommissionConfigs, updateCommissionConfig, getCommissionHistory, getMarketConfig, updateMarketConfig, getMissingStocks, getGroupStatistics, getUserStatistics, getUserDetail, getUserLoginHistory, getUserTransactions, setTradeEnabled, setAdminAccess, getGroupUsers as getGroupUsersAPI, addGroupUser as addGroupUserAPI, removeGroupUser as removeGroupUserAPI, payDividend, doAllotment, getUserFundFlow, startStockSync, getStockSyncProgress, getStockSyncHistory, getStockSyncDetail, cancelStockSync, getOptionWhitelist, addOptionWhitelist, deleteOptionWhitelist, toggleOptionWhitelistStatus, getOptionContracts, generateOptionContracts, syncOptionData, getSyncProgress, getSchedulerConfigs, updateSchedulerConfig, reloadScheduler } from '@/api/admin'
+import { getStats, getGroups, createGroup as createGroupAPI, deleteGroup as deleteGroupAPI, getUsers, toggleUserStatus as toggleUserStatusAPI, deleteUser as deleteUserAPI, getStocks, getStockPositions, createStock as createStockAPI, deleteStock as deleteStockAPI, getInviteCodes, createInviteCode, getCommissionConfigs, updateCommissionConfig, getCommissionHistory, getMarketConfig, updateMarketConfig, getMissingStocks, getGroupStatistics, getUserStatistics, getUserDetail, getUserLoginHistory, getUserTransactions, setTradeEnabled, setAdminAccess, getGroupUsers as getGroupUsersAPI, addGroupUser as addGroupUserAPI, removeGroupUser as removeGroupUserAPI, payDividend, doAllotment, getUserFundFlow, startStockSync, getStockSyncProgress, getStockSyncHistory, getStockSyncDetail, cancelStockSync, getOptionWhitelist, addOptionWhitelist, deleteOptionWhitelist, toggleOptionWhitelistStatus, getOptionContracts, generateOptionContracts, syncOptionData, getSyncProgress, getSchedulerConfigs, updateSchedulerConfig, reloadScheduler, getAiConfigs, createAiConfig, updateAiConfig, deleteAiConfig, testAiConnection, getAiUsers, generateAiUsers as generateAiUsersAPI, regenerateAiUsers as regenerateAiUsersAPI, triggerAiTrade as triggerAiTradeAPI, getAiLogs, updateAiUserNickname, getAnnouncementAdmin, saveAnnouncement, translateAnnouncement as translateAnnouncementAPI } from '@/api/admin'
 import { getVersion } from '@/api/about'
+
+const DEFAULT_AI_PROMPTS = {
+  conservative: '你是保守型投资者。偏好低估值蓝筹股，严格止损，分散持仓控制风险。单只股票持仓不超过总资产30%。每次交易金额不超过可用资金25%。优先考虑A股市场，关注市盈率低、分红稳定的公司。不能在同一天对同一支股票进行买入又卖出。',
+  random: '你是混合型投资者。综合参考技术面和基本面，灵活调仓。单只股票持仓不超过总资产50%。每次交易金额不超过可用资金40%。A股、港股、美股均可交易。不能在同一天对同一支股票进行买入又卖出。',
+  aggressive: '你是激进型投资者。偏好高成长股票，敢于追涨杀跌，集中持仓博取高收益。单只股票持仓不超过总资产80%。每次交易金额不超过可用资金60%。关注热门板块和题材股，A股、港股、美股均可交易。不能在同一天对同一支股票进行买入又卖出。'
+}
 
 const router = useRouter()
 const { t } = useI18n()
@@ -1261,6 +1481,24 @@ const editingSchedulerId = ref(null)
 const editingCron = ref('')
 const reloadingScheduler = ref(false)
 const dividendStock = ref(null)
+
+// AI 配置
+const aiConfigList = ref([])
+const aiConfigLoading = ref(false)
+const showAiConfigDialog = ref(false)
+const editingAiConfigId = ref(null)
+const aiConfigForm = reactive({ config_name: '', api_url: '', api_key: '', model_name: 'gpt-3.5-turbo', max_tokens: 2000, temperature: 0.7, personality_prompts: { ...DEFAULT_AI_PROMPTS } })
+const aiTesting = ref(false)
+
+// AI 用户
+const aiUserList = ref([])
+const aiUserLoading = ref(false)
+const aiGenerateConfigId = ref(null)
+const aiTriggering = ref(false)
+const aiLogList = ref([])
+const aiLogLoading = ref(false)
+const editingAiNicknameId = ref(null)
+const editingAiNickname = ref('')
 const allotmentStock = ref(null)
 const dividendAmount = ref(0.1)
 const allotmentShares = ref(1)
@@ -1310,7 +1548,12 @@ const groupForm = reactive({ name: '', description: '', init_cash: 100000 })
 const stockForm = reactive({ stock_code: '', stock_name: '', market_type: 1 })
 const inviteForm = reactive({ group_id: 1, expire_days: 0, use_limit: 0 })
 const commissionForm = reactive({ id: null, market_type: null, trade_type: null, newRate: 0, remark: '' })
-const marketConfigForm = reactive({ id: null, refresh_time: '', trade_start: '', trade_end: '', enabled: 1 })
+const marketConfigForm = reactive({ id: null, refresh_time: '', forbid_start: '', forbid_end: '', enabled: 1 })
+
+const announcementLangTab = ref('zh_cn')
+const announcementForm = reactive({ content_zh_cn: '', content_zh_tw: '', content_en: '', enabled: 1 })
+const translating = ref(false)
+const savingAnnouncement = ref(false)
 
 const loadingDetail = ref(true)
 const userDetailActiveTab = ref('info')
@@ -1358,6 +1601,17 @@ watch(activeMenu, (val) => {
   }
   if (val === 'scheduler') {
     fetchSchedulerConfigs()
+  }
+  if (val === 'announcement') {
+    loadAnnouncement()
+  }
+  if (val === 'ai-config') {
+    fetchAiConfigs()
+  }
+  if (val === 'ai-users') {
+    fetchAiUsers()
+    fetchAiLogs()
+    fetchGroups()
   }
 })
 
@@ -1605,8 +1859,8 @@ const saveCommission = async () => {
 const editMarketConfig = (row) => {
   marketConfigForm.id = row.id
   marketConfigForm.refresh_time = row.refresh_time
-  marketConfigForm.trade_start = row.trade_start
-  marketConfigForm.trade_end = row.trade_end
+  marketConfigForm.forbid_start = row.forbid_start
+  marketConfigForm.forbid_end = row.forbid_end
   marketConfigForm.enabled = row.enabled
   showMarketConfigDialog.value = true
 }
@@ -2250,7 +2504,7 @@ const fetchSchedulerConfigs = async () => {
     const res = await getSchedulerConfigs()
     schedulerConfigs.value = res.data || []
   } catch (e) {
-    ElMessage.error('获取调度配置失败')
+    ElMessage.error(e.message || '获取调度配置失败')
   }
   schedulerLoading.value = false
 }
@@ -2294,6 +2548,58 @@ const reloadSchedulerJobs = async () => {
     ElMessage.error(e.message || '重载失败')
   }
   reloadingScheduler.value = false
+}
+
+const loadAnnouncement = async () => {
+  try {
+    const res = await getAnnouncementAdmin()
+    const data = res.data
+    if (data) {
+      announcementForm.content_zh_cn = data.content_zh_cn || ''
+      announcementForm.content_zh_tw = data.content_zh_tw || ''
+      announcementForm.content_en = data.content_en || ''
+      announcementForm.enabled = data.enabled
+    }
+  } catch (e) {
+    console.error('Load announcement error:', e)
+  }
+}
+
+const translateAnnouncementContent = async () => {
+  const lang = announcementLangTab.value
+  const content = announcementForm[`content_${lang}`]
+  if (!content) return ElMessage.warning('请先输入要翻译的内容')
+  translating.value = true
+  try {
+    const res = await translateAnnouncementAPI({ source_lang: lang, content })
+    if (res.code === 0 && res.data) {
+      if (res.data.content_zh_cn) announcementForm.content_zh_cn = res.data.content_zh_cn
+      if (res.data.content_zh_tw) announcementForm.content_zh_tw = res.data.content_zh_tw
+      if (res.data.content_en) announcementForm.content_en = res.data.content_en
+      ElMessage.success('翻译完成')
+    } else {
+      ElMessage.error(res.message || '翻译失败')
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '翻译失败')
+  }
+  translating.value = false
+}
+
+const saveAnnouncementContent = async () => {
+  savingAnnouncement.value = true
+  try {
+    const res = await saveAnnouncement({
+      content_zh_cn: announcementForm.content_zh_cn,
+      content_zh_tw: announcementForm.content_zh_tw,
+      content_en: announcementForm.content_en,
+      enabled: announcementForm.enabled
+    })
+    ElMessage.success(res.message || '保存成功')
+  } catch (e) {
+    ElMessage.error(e.message || '保存失败')
+  }
+  savingAnnouncement.value = false
 }
 
 const syncOption = async (action) => {
@@ -2383,6 +2689,224 @@ const fetchContracts = async (page) => {
     ElMessage.error(e.message || t('admin.operate_failed'))
   }
   contractLoading.value = false
+}
+
+// ==================== AI 配置 ====================
+const fetchAiConfigs = async () => {
+  aiConfigLoading.value = true
+  try {
+    const res = await getAiConfigs()
+    if (res.code === 0) {
+      aiConfigList.value = res.data || []
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '获取AI配置失败')
+  }
+  aiConfigLoading.value = false
+}
+
+const saveAiConfig = async () => {
+  const form = aiConfigForm
+  if (!form.config_name || !form.api_url || !form.api_key) {
+    ElMessage.warning('请填写完整配置信息')
+    return
+  }
+  try {
+    let res
+    if (editingAiConfigId.value) {
+      res = await updateAiConfig(editingAiConfigId.value, form)
+    } else {
+      res = await createAiConfig(form)
+    }
+    if (res.code === 0) {
+      ElMessage.success('保存成功')
+      showAiConfigDialog.value = false
+      fetchAiConfigs()
+    } else {
+      ElMessage.error(res.message || '保存失败')
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '保存失败')
+  }
+}
+
+const editAiConfig = (row) => {
+  editingAiConfigId.value = row.id
+  aiConfigForm.config_name = row.config_name
+  aiConfigForm.api_url = row.api_url
+  aiConfigForm.api_key = ''
+  aiConfigForm.model_name = row.model_name
+  aiConfigForm.max_tokens = row.max_tokens
+  aiConfigForm.temperature = row.temperature
+  aiConfigForm.personality_prompts = row.personality_prompts && (row.personality_prompts.conservative || row.personality_prompts.random || row.personality_prompts.aggressive)
+    ? { ...row.personality_prompts }
+    : { ...DEFAULT_AI_PROMPTS }
+  showAiConfigDialog.value = true
+}
+
+const handleDeleteAiConfig = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要删除该配置吗？', '确认', { type: 'warning' })
+  } catch { return }
+  try {
+    const res = await deleteAiConfig(row.id)
+    if (res.code === 0) {
+      ElMessage.success('删除成功')
+      fetchAiConfigs()
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '删除失败')
+  }
+}
+
+const testAiConfig = async (row) => {
+  aiTesting.value = true
+  try {
+    const res = await testAiConnection({
+      api_url: row.api_url,
+      api_key: row.api_key,
+      model_name: row.model_name
+    })
+    if (res.code === 0) {
+      ElMessage.success('连接成功: ' + (res.data?.message || ''))
+    } else {
+      ElMessage.error('连接失败: ' + (res.data?.message || res.message || ''))
+    }
+  } catch (e) {
+    ElMessage.error('连接失败: ' + e.message)
+  }
+  aiTesting.value = false
+}
+
+const testAiConfigForm = async () => {
+  aiTesting.value = true
+  try {
+    const res = await testAiConnection({
+      api_url: aiConfigForm.api_url,
+      api_key: aiConfigForm.api_key,
+      model_name: aiConfigForm.model_name
+    })
+    if (res.code === 0) {
+      ElMessage.success('连接成功: ' + (res.data?.message || ''))
+    } else {
+      ElMessage.error('连接失败: ' + (res.data?.message || res.message || ''))
+    }
+  } catch (e) {
+    ElMessage.error('连接失败: ' + e.message)
+  }
+  aiTesting.value = false
+}
+
+// ==================== AI 用户 ====================
+const fetchAiUsers = async () => {
+  aiUserLoading.value = true
+  try {
+    const res = await getAiUsers()
+    if (res.code === 0) {
+      aiUserList.value = res.data || []
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '获取AI用户失败')
+  }
+  aiUserLoading.value = false
+}
+
+const handleGenerateAiUsers = async (groupId) => {
+  if (!aiGenerateConfigId.value) {
+    ElMessage.warning('请先选择LLM配置')
+    return
+  }
+  try {
+    const res = await generateAiUsersAPI(groupId, aiGenerateConfigId.value)
+    if (res.code === 0) {
+      ElMessage.success('AI用户生成成功')
+      fetchAiUsers()
+    } else {
+      ElMessage.error(res.message || '生成失败')
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '生成失败')
+  }
+}
+
+const handleRegenerateAiUsers = async (groupId) => {
+  if (!aiGenerateConfigId.value) {
+    ElMessage.warning('请先选择LLM配置')
+    return
+  }
+  try {
+    await ElMessageBox.confirm('重新生成会删除现有AI用户并创建新的，确定继续？', '确认', { type: 'warning' })
+  } catch { return }
+  try {
+    const res = await regenerateAiUsersAPI(groupId, aiGenerateConfigId.value)
+    if (res.code === 0) {
+      ElMessage.success('AI用户重新生成成功')
+      fetchAiUsers()
+    } else {
+      ElMessage.error(res.message || '重新生成失败')
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '重新生成失败')
+  }
+}
+
+const handleTriggerAiTrade = async () => {
+  aiTriggering.value = true
+  try {
+    const res = await triggerAiTradeAPI()
+    if (res.code === 0) {
+      ElMessage.success('AI交易触发完成')
+      fetchAiUsers()
+      fetchAiLogs()
+    } else {
+      ElMessage.error(res.message || '触发失败')
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '触发失败')
+  }
+  aiTriggering.value = false
+}
+
+const fetchAiLogs = async () => {
+  aiLogLoading.value = true
+  try {
+    const res = await getAiLogs({ page: 1, pageSize: 20 })
+    if (res.code === 0) {
+      aiLogList.value = res.data?.list || []
+    }
+  } catch (e) {
+    console.error('获取AI日志失败:', e)
+  }
+  aiLogLoading.value = false
+}
+
+const fetchGroups = async () => {
+  try {
+    const res = await getGroups()
+    groupList.value = res.data?.list || []
+  } catch (e) {
+    console.error('获取群组列表失败:', e)
+  }
+}
+
+const editAiNickname = (row) => {
+  editingAiNicknameId.value = row.id
+  editingAiNickname.value = row.nickname
+}
+
+const saveAiNickname = async (row) => {
+  try {
+    const res = await updateAiUserNickname(row.id, editingAiNickname.value)
+    if (res.code === 0) {
+      ElMessage.success('昵称已更新')
+      row.nickname = editingAiNickname.value
+      editingAiNicknameId.value = null
+    } else {
+      ElMessage.error(res.message || '更新失败')
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '更新失败')
+  }
 }
 
 </script>

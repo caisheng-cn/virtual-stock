@@ -54,6 +54,15 @@ if (process.env.ENABLE_OPTION_SCHEDULER !== 'false') {
   }
 }
 
+if (process.env.ENABLE_AI_SCHEDULER !== 'false') {
+  try {
+    require('./services/aiSchedulerService').start()
+    console.log('AI调度器已启动')
+  } catch (e) {
+    console.log('AI调度器启动失败:', e.message)
+  }
+}
+
 const PORT = process.env.PORT || 3006
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`)

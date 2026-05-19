@@ -27,18 +27,27 @@ request.interceptors.request.use(config => {
   return config
 })
 
+const AUTH_ERRORS = ['未授权', 'Token无效', '无效的Token']
+
+function redirectLogin(url) {
+  localStorage.removeItem('token')
+  localStorage.removeItem('adminToken')
+  window.location.href = url?.startsWith('/admin') ? '/admin-login' : '/login'
+}
+
 request.interceptors.response.use(
   response => {
     if (response.data.code === 0) {
       return response.data
     }
+    if (AUTH_ERRORS.includes(response.data.message)) {
+      redirectLogin(response.config?.url)
+    }
     return Promise.reject(new Error(response.data.message))
   },
   error => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('adminToken')
-      window.location.href = '/login'
+      redirectLogin(error.config?.url)
     }
     return Promise.reject(error)
   }

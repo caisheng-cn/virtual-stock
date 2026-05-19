@@ -41,11 +41,6 @@ router.get('/:groupId', auth, async (req, res) => {
       order: [['created_at', 'DESC']]
     })
 
-    const userIds = [...new Set(rows.map(r => r.user_id))]
-    const users = await User.findAll({ where: { id: userIds }, attributes: ['id', 'username', 'nickname'] })
-    const userMap = {}
-    for (const u of users) userMap[u.id] = { nickname: u.nickname || u.username, username: u.username }
-
     const messageIds = rows.map(r => r.id)
 
     const likes = await MessageLike.findAll({ where: { message_id: messageIds } })
@@ -56,6 +51,14 @@ router.get('/:groupId', auth, async (req, res) => {
     }
 
     const replies = await MessageReply.findAll({ where: { message_id: messageIds }, order: [['created_at', 'ASC']] })
+
+    const msgUserIds = rows.map(r => r.user_id)
+    const replyUserIds = replies.map(r => r.user_id)
+    const userIds = [...new Set([...msgUserIds, ...replyUserIds])]
+    const users = await User.findAll({ where: { id: userIds }, attributes: ['id', 'username', 'nickname'] })
+    const userMap = {}
+    for (const u of users) userMap[u.id] = { nickname: u.nickname || u.username, username: u.username }
+
     const replyMap = {}
     for (const r of replies) {
       if (!replyMap[r.message_id]) replyMap[r.message_id] = []

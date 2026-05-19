@@ -92,6 +92,43 @@
         </el-col>
       </el-row>
 
+      <el-card class="bulletin-card" v-if="bulletinData">
+        <template #header>
+          <div class="card-header">
+            <span>📢 {{ $t('home.bulletin_title') }}</span>
+          </div>
+        </template>
+        <div v-if="bulletinAnnouncement" class="bulletin-announcement">
+          <el-alert :title="bulletinAnnouncement" type="warning" :closable="false" show-icon />
+        </div>
+        <div class="bulletin-section">
+          <div class="bulletin-section-title">⏰ {{ $t('home.bulletin_forbidden') }}</div>
+          <div v-for="item in bulletinForbidden" :key="item.market" class="bulletin-row">
+            <span class="bulletin-label">{{ item.market }}</span>
+            <span class="bulletin-value">{{ item.forbid_start }} ~ {{ item.forbid_end }}</span>
+            <el-tag :type="item.isCrossDay ? 'warning' : 'info'" size="small">{{ item.typeLabel }}</el-tag>
+          </div>
+        </div>
+        <div class="bulletin-section">
+          <div class="bulletin-section-title">💰 {{ $t('home.bulletin_commission') }}</div>
+          <div v-for="item in bulletinCommission" :key="item.market" class="bulletin-row">
+            <span class="bulletin-label">{{ item.market }}</span>
+            <span class="bulletin-value">{{ item.buyRate }}‰ / {{ item.sellRate }}‰</span>
+          </div>
+        </div>
+        <div class="bulletin-section">
+          <div class="bulletin-section-title">💱 {{ $t('home.bulletin_exchange') }}</div>
+          <div class="bulletin-row">
+            <span class="bulletin-label">USD/CNY</span>
+            <span class="bulletin-value">1 USD = {{ bulletinRates?.USD_TO_CNY }} CNY</span>
+          </div>
+          <div class="bulletin-row">
+            <span class="bulletin-label">HKD/CNY</span>
+            <span class="bulletin-value">1 HKD = {{ bulletinRates?.HKD_TO_CNY }} CNY</span>
+          </div>
+        </div>
+      </el-card>
+
       <div class="footer">
         <a href="javascript:void(0)" @click="$router.push('/about')">{{ $t('nav.about') }}</a>
       </div>
@@ -128,7 +165,7 @@
  * Version History:
  *   - 2024-01-01: Initial version
  */
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -136,6 +173,7 @@ import { i18n } from '@/i18n'
 import { getUserInfo } from '@/api/user'
 import { getMyGroups, getBalance } from '@/api/group'
 import { getUnreadCount } from '@/api/message'
+import { getMarketConfig, getCommissionConfigs, getExchangeRates, getAnnouncement } from '@/api/stock'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -146,6 +184,41 @@ const balance = ref(null)
 const unreadCount = ref(0)
 
 const showPwdDialog = ref(false)
+
+const bulletinData = ref(null)
+const bulletinAnnouncement = ref('')
+const bulletinRates = ref(null)
+const bulletinForbidden = computed(() => {
+  if (!bulletinData.value) return []
+  const lang = i18n.global.locale.value
+  const marketLabels = { 1: t('market.a_share'), 2: t('market.hk_stock'), 3: t('market.us_stock') }
+  return bulletinData.value.map(c => {
+    const fs = c.forbid_start
+    const fe = c.forbid_end
+    const isCrossDay = fs > fe
+    return {
+      market: marketLabels[c.market_type] || `Market ${c.market_type}`,
+      forbid_start: fs,
+      forbid_end: fe,
+      isCrossDay,
+      typeLabel: isCrossDay ? t('home.bulletin_cross_day') : t('home.bulletin_same_day')
+    }
+  })
+})
+const bulletinCommission = computed(() => {
+  if (!bulletinData.value) return []
+  const marketLabels = { 1: t('market.a_share'), 2: t('market.hk_stock'), 3: t('market.us_stock') }
+  return [1, 2, 3].map(mt => {
+    const buys = commissionConfigs.value.filter(c => c.market_type === mt && c.trade_type === 1)
+    const sells = commissionConfigs.value.filter(c => c.market_type === mt && c.trade_type === 2)
+    return {
+      market: marketLabels[mt] || `Market ${mt}`,
+      buyRate: buys.length > 0 ? buys[0].commission_rate : '—',
+      sellRate: sells.length > 0 ? sells[0].commission_rate : '—'
+    }
+  })
+})
+const commissionConfigs = ref([])
 const pwdLoading = ref(false)
 const pwdFormRef = ref()
 const pwdForm = reactive({
@@ -222,6 +295,29 @@ const switchLang = (lang) => {
  * Description: Fetches user groups, balance, and unread message count on page load.
  * @returns {Promise<void>}
  */
+const fetchBulletin = async () => {
+  try {
+    const [marketRes, commissionRes, ratesRes, annRes] = await Promise.all([
+      getMarketConfig(),
+      getCommissionConfigs(),
+      getExchangeRates(),
+      getAnnouncement()
+    ])
+    bulletinData.value = marketRes.data || []
+    commissionConfigs.value = commissionRes.data || []
+    bulletinRates.value = ratesRes.data || null
+    const ann = annRes.data
+    if (ann && ann.enabled) {
+      const lang = i18n.global.locale.value
+      if (lang === 'zh-TW') bulletinAnnouncement.value = ann.content_zh_tw || ann.content_zh_cn || ann.content_en || ''
+      else if (lang === 'en') bulletinAnnouncement.value = ann.content_en || ann.content_zh_cn || '' 
+      else bulletinAnnouncement.value = ann.content_zh_cn || ann.content_zh_tw || ann.content_en || ''
+    }
+  } catch (e) {
+    console.error('Fetch bulletin error:', e)
+  }
+}
+
 onMounted(async () => {
   try {
     const groupsRes = await getMyGroups()
@@ -236,6 +332,7 @@ onMounted(async () => {
   } catch (err) {
     ElMessage.error(err.message || '获取数据失败')
   }
+  fetchBulletin()
 })
 
 /**
@@ -374,6 +471,55 @@ const handleLogout = () => {
   position: absolute;
   top: 8px;
   right: 8px;
+}
+
+.bulletin-card {
+  margin-top: 24px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bulletin-announcement {
+  margin-bottom: 16px;
+}
+
+.bulletin-section {
+  margin-bottom: 16px;
+}
+
+.bulletin-section:last-child {
+  margin-bottom: 0;
+}
+
+.bulletin-section-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: var(--color-text);
+}
+
+.bulletin-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.bulletin-label {
+  width: 60px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.bulletin-value {
+  font-family: var(--font-num);
+  color: var(--color-text);
+  min-width: 120px;
 }
 
 .unread-badge :deep(.el-badge__content) {

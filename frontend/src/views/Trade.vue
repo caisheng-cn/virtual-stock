@@ -675,7 +675,11 @@ const handleTrade = async () => {
 
   const isBuy = tradeForm.type === 1
   const stockName = selectedStock.value.stock_name
-  const shares = tradeForm.shares
+  const maxAllowed = isBuy ? maxBuyShares.value : maxSellShares.value
+  const shares = Math.min(tradeForm.shares, maxAllowed)
+  if (shares !== tradeForm.shares) {
+    tradeForm.shares = shares
+  }
   const price = stockQuote.value?.price || 0
   const amount = amountOriginal.value
   const amountCny = amountCNY.value
@@ -685,7 +689,7 @@ const handleTrade = async () => {
 
   const confirmMsg = isBuy
     ? `${t('trade_page.stock_name')}: ${stockName}\n${t('trade_page.shares')}: ${shares}\n${t('trade_page.current_price')}: ${price} ${currencySymbol.value} (~${formatMoney(price * EXCHANGE_RATES[marketType.value])} RMB)\n${t('trade_page.estimated_amount')}: ${formatMoney(amount)} ${currencySymbol.value} (~${formatMoney(amountCny)} RMB)\n${t('trade_page.estimated_commission')}: ${formatMoney(commission)} ${currencySymbol.value} (~${formatMoney(commissionCny)} RMB)\n${t('trade_page.actual_deduction')}: ${formatMoney(totalCny)} RMB`
-    : `${t('trade_page.stock_name')}: ${stockName}\n${t('trade_page.shares')}: ${shares}\n${t('trade_page.current_price')}: ${price} ${currencySymbol.value} (~${formatMoney(price * EXCHANGE_RATES[marketType.value])} RMB)\n${t('trade_page.estimated_amount')}: ${formatMoney(amount)} ${currencySymbol.value} (~${formatMoney(amountCny)} RMB)\n${t('trade_page.estimated_commission')}: ${formatMoney(commission)} ${currencySymbol.value} (~${formatMoney(commissionCny)} RMB)\n${t('trade_page.actual_deduction')}: ${formatMoney(totalCny)} RMB`
+    : `${t('trade_page.stock_name')}: ${stockName}\n${t('trade_page.shares')}: ${shares}\n${t('trade_page.current_price')}: ${price} ${currencySymbol.value} (~${formatMoney(price * EXCHANGE_RATES[marketType.value])} RMB)\n${t('trade_page.estimated_amount')}: ${formatMoney(amount)} ${currencySymbol.value} (~${formatMoney(amountCny)} RMB)\n${t('trade_page.estimated_commission')}: ${formatMoney(commission)} ${currencySymbol.value} (~${formatMoney(commissionCny)} RMB)\n${t('trade_page.net_received')}: ${formatMoney(totalCny)} RMB`
 
   try {
     await ElMessageBox.confirm(confirmMsg, t('trade_page.confirm_trade'), {

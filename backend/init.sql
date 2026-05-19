@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS users (
   admin_access    TINYINT DEFAULT 0 COMMENT '后台访问: 0无 1有',
   last_trade_date DATE,
   language        VARCHAR(10) DEFAULT 'zh-CN',
+  is_ai           TINYINT DEFAULT 0 COMMENT '是否AI用户: 0否 1是',
+  ai_personality  VARCHAR(20) DEFAULT '' COMMENT 'AI投资风格(conservative/random/aggressive)',
+  ai_config_id    INT DEFAULT 0 COMMENT '关联的LLM配置ID',
+  daily_trade_count INT DEFAULT 0 COMMENT '当日已交易次数',
+  daily_trade_date  DATE COMMENT '当日交易日期',
   created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_username (username),
@@ -299,8 +304,8 @@ CREATE TABLE IF NOT EXISTS market_config (
   id           INT PRIMARY KEY AUTO_INCREMENT,
   market_type  TINYINT NOT NULL,
   refresh_time VARCHAR(10),
-  trade_start  VARCHAR(10),
-  trade_end    VARCHAR(10),
+  forbid_start  VARCHAR(10),
+  forbid_end    VARCHAR(10),
   enabled      TINYINT DEFAULT 1,
   created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_market (market_type)
@@ -412,14 +417,55 @@ INSERT INTO commission_configs (market_type, trade_type, commission_rate) VALUES
 ON DUPLICATE KEY UPDATE commission_rate = VALUES(commission_rate);
 
 -- 市场时间配置
-INSERT INTO market_config (market_type, refresh_time, trade_start, trade_end) VALUES
-(1, '09:00', '09:30', '15:00'),
-(2, '09:30', '09:30', '16:00'),
-(3, '04:00', '09:30', '16:00')
+INSERT INTO market_config (market_type, refresh_time, forbid_start, forbid_end) VALUES
+(1, '09:00', '15:00', '09:30'),
+(2, '09:30', '16:00', '09:30'),
+(3, '04:00', '04:00', '21:30')
 ON DUPLICATE KEY UPDATE refresh_time = VALUES(refresh_time);
 
 -- ============================================================
--- 24. 期权标的白名单
+-- 24. AI LLM 配置表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ai_llm_configs (
+  id          INT PRIMARY KEY AUTO_INCREMENT,
+  config_name VARCHAR(50) NOT NULL COMMENT '配置名称',
+  api_url     VARCHAR(500) NOT NULL COMMENT 'LLM接口地址',
+  api_key     VARCHAR(500) NOT NULL COMMENT 'API密钥',
+  model_name  VARCHAR(100) DEFAULT 'gpt-3.5-turbo' COMMENT '模型名称',
+  max_tokens  INT DEFAULT 2000 COMMENT '最大Token数',
+  temperature          DECIMAL(3,2) DEFAULT 0.7 COMMENT '温度参数',
+  personality_prompts  TEXT COMMENT '各风格自定义提示词(JSON)',
+  status               TINYINT DEFAULT 1 COMMENT '状态: 0禁用 1启用',
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI LLM 配置';
+
+-- ============================================================
+-- 25. AI 交易日志表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ai_trade_logs (
+  id                BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id           INT NOT NULL COMMENT 'AI用户ID',
+  group_id          INT NOT NULL COMMENT '群组ID',
+  interaction_type  VARCHAR(10) DEFAULT '' COMMENT '类型: trade/reply/like',
+  decision          VARCHAR(20) DEFAULT '' COMMENT '决策: buy/sell/hold',
+  stock_code        VARCHAR(20) DEFAULT '',
+  market_type       TINYINT DEFAULT 0,
+  shares            INT DEFAULT 0,
+  reason            TEXT COMMENT '决策理由',
+  llm_response      TEXT COMMENT 'LLM原始回复',
+  executed          TINYINT DEFAULT 0 COMMENT '是否已执行',
+  trade_id          BIGINT DEFAULT 0 COMMENT '关联交易ID',
+  target_message_id INT DEFAULT 0 COMMENT '关联群消息ID(社交互动)',
+  reply_content     TEXT COMMENT '回复内容(社交互动)',
+  created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user (user_id),
+  INDEX idx_group (group_id),
+  INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI 交易日志';
+
+-- ============================================================
+-- 26. 期权标的白名单
 -- ============================================================
 CREATE TABLE IF NOT EXISTS option_whitelist (
   id INT PRIMARY KEY AUTO_INCREMENT,
@@ -566,6 +612,16 @@ CREATE TABLE IF NOT EXISTS scheduler_configs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='调度任务配置';
 
 -- ============================================================
+-- 扩展 users 表 - 增加AI相关字段
+-- ============================================================
+ALTER TABLE users
+  ADD COLUMN is_ai TINYINT DEFAULT 0 COMMENT '是否AI用户: 0否 1是',
+  ADD COLUMN ai_personality VARCHAR(20) DEFAULT '' COMMENT 'AI投资风格(conservative/random/aggressive)',
+  ADD COLUMN ai_config_id INT DEFAULT 0 COMMENT '关联的LLM配置ID',
+  ADD COLUMN daily_trade_count INT DEFAULT 0 COMMENT '当日已交易次数',
+  ADD COLUMN daily_trade_date DATE COMMENT '当日交易日期';
+
+-- ============================================================
 -- 扩展 group_messages 表 - 增加期权字段
 -- ============================================================
 ALTER TABLE group_messages
@@ -575,11 +631,23 @@ ALTER TABLE group_messages
   ADD COLUMN quantity INT DEFAULT NULL COMMENT '张数（期权消息专用）';
 
 -- ============================================================
+-- 30. 管理员公告表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS admin_announcements (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  content_zh_cn TEXT COMMENT '简体中文内容',
+  content_zh_tw TEXT COMMENT '繁體中文內容',
+  content_en TEXT COMMENT 'English content',
+  enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='管理员公告';
+
+-- ============================================================
 -- 调度任务种子数据
 -- ============================================================
 INSERT IGNORE INTO scheduler_configs (task_key, task_name, cron_expression, enabled, description) VALUES
 ('option_contract_sync', '同步期权合约', '50 8 * * 1-5', 1, '每个交易日 08:50 从 AKShare 同步全量合约列表'),
 ('option_price_sync', '同步实时行情', '*/5 9,10,11,13,14 * * 1-5', 1, '交易时段每5分钟刷新期权实时报价'),
 ('option_daily_close', '同步收盘数据', '5 15 * * 1-5', 1, '每个交易日 15:05 同步日线收盘价和 Greeks'),
-('option_settlement', '到期自动结算', '10 15 * * 1-5', 1, '每个交易日 15:10 自动结算当日到期的实值期权'),
-('stock_data_sync', '同步股票数据', '0 9 * * 1-5', 1, '每个交易日 09:00 同步 A 股/港股/美股日线数据');
+('option_settlement', '到期自动结算', '10 15 * * 1-5', 1, '每个交易日 15:10 自动结算当日到期的实值期权');

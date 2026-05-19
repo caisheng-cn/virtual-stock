@@ -1,4 +1,5 @@
 const axios = require('axios')
+const iconv = require('iconv-lite')
 const { spawn } = require('child_process')
 const path = require('path')
 const { StockPool, StockPrice, StockPricesCache, sequelize } = require('../models')
@@ -50,13 +51,29 @@ function runPythonABatch(stocks) {
   return runPythonScript(PYTHON_SCRIPT, { action: 'a_share_batch', stocks })
 }
 
+function runPythonAQuote(symbol) {
+  return runPythonScript(PYTHON_SCRIPT, { action: 'a_share_quote', symbol })
+}
+
+function runPythonAKlineSingle(symbol, startDate, endDate) {
+  return runPythonScript(PYTHON_SCRIPT, {
+    action: 'a_share',
+    symbol,
+    start_date: startDate || new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0],
+    end_date: endDate || new Date().toISOString().split('T')[0]
+  })
+}
+
 async function getAStockQuote(code) {
   const url = `http://hq.sinajs.cn/list=${getSinaPrefix(code)}${code}`
-  const response = await axios.get(url, { headers: { Referer: SINA_REFERER } })
-  const text = response.data
+  const response = await axios.get(url, {
+    headers: { Referer: SINA_REFERER },
+    responseType: 'arraybuffer',
+    timeout: 8000
+  })
+  const text = iconv.decode(Buffer.from(response.data), 'gbk')
   const match = text.match(/="([^"]+)"/)
   if (!match) throw new Error('获取数据失败')
-
   const data = match[1].split(',')
   return {
     stockCode: code,
@@ -74,9 +91,34 @@ async function getAStockQuote(code) {
   }
 }
 
+async function fetchAQuoteFromAKShare(code) {
+  const data = await runPythonAQuote(code)
+  if (data.error) throw new Error(data.error)
+  return {
+    stockCode: code,
+    stockName: data.stock_name,
+    marketType: 1,
+    openPrice: data.open_price || 0,
+    prevClose: data.prev_close || 0,
+    price: data.price || 0,
+    highPrice: data.high_price || 0,
+    lowPrice: data.low_price || 0,
+    volume: data.volume || 0,
+    amount: data.amount || 0,
+    tradeDate: new Date().toISOString().split('T')[0],
+    changePercent: data.change_percent || 0
+  }
+}
+
 async function fetchQuoteFromAPI(code, marketType) {
-  if (marketType == 1) return getAStockQuote(code)
-  // HK/US stocks: fallback to DB in getQuote
+  if (marketType == 1) {
+    try {
+      return await fetchAQuoteFromAKShare(code)
+    } catch (e) {
+      console.log(`[AKShare] 实时行情失败 ${code}, 降级到Sina:`, e.message)
+      return await getAStockQuote(code)
+    }
+  }
   throw new Error('API not available')
 }
 
@@ -133,18 +175,21 @@ async function getQuote(code, marketType) {
       })
       
       try {
-        await StockPrice.create({
-          stock_code: code,
-          stock_name: quote.stockName,
-          market_type: marketType,
-          trade_date: quote.tradeDate || today,
-          open_price: quote.openPrice,
-          high_price: quote.highPrice,
-          low_price: quote.lowPrice,
-          close_price: quote.price,
-          prev_close: quote.prevClose,
-          volume: quote.volume || 0,
-          amount: quote.amount || 0
+        await StockPrice.findOrCreate({
+          where: { stock_code: code, market_type: marketType, trade_date: quote.tradeDate || today },
+          defaults: {
+            stock_code: code,
+            stock_name: quote.stockName,
+            market_type: marketType,
+            trade_date: quote.tradeDate || today,
+            open_price: quote.openPrice,
+            high_price: quote.highPrice,
+            low_price: quote.lowPrice,
+            close_price: quote.price,
+            prev_close: quote.prevClose,
+            volume: quote.volume || 0,
+            amount: quote.amount || 0
+          }
         })
       } catch (err) {
         console.log('History save error:', err.message)
@@ -216,26 +261,44 @@ async function getQuote(code, marketType) {
 
 async function getHistory(code, marketType, startDate, endDate) {
   if (marketType == 1) {
-    const url = `http://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${getSinaPrefix(code)}${code}&scale=240&ma=no&datalen=365`
-    const response = await axios.get(url, { headers: { Referer: 'http://finance.sina.com.cn' } })
-    let data = response.data
-    
-    if (startDate || endDate) {
-      data = data.filter(d => {
-        if (startDate && d.day < startDate) return false
-        if (endDate && d.day > endDate) return false
-        return true
-      })
+    try {
+      const data = await runPythonAKlineSingle(code, startDate, endDate)
+      if (data.error) throw new Error(data.error)
+      if (!Array.isArray(data)) throw new Error('返回格式异常')
+      return data.map(d => ({
+        tradeDate: d.trade_date,
+        openPrice: parseFloat(d.open_price) || 0,
+        highPrice: parseFloat(d.high_price) || 0,
+        lowPrice: parseFloat(d.low_price) || 0,
+        closePrice: parseFloat(d.close_price) || 0,
+        volume: parseInt(d.volume) || 0
+      }))
+    } catch (err) {
+      console.log(`[AKShare] A股K线失败 ${code}, 降级到Sina:`, err.message)
+      try {
+        const url = `http://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${getSinaPrefix(code)}${code}&scale=240&ma=no&datalen=365`
+        const response = await axios.get(url, { headers: { Referer: SINA_REFERER }, timeout: 10000 })
+        let data = response.data
+        if (startDate || endDate) {
+          data = data.filter(d => {
+            if (startDate && d.day < startDate) return false
+            if (endDate && d.day > endDate) return false
+            return true
+          })
+        }
+        return data.map(d => ({
+          tradeDate: d.day,
+          openPrice: parseFloat(d.open),
+          highPrice: parseFloat(d.high),
+          lowPrice: parseFloat(d.low),
+          closePrice: parseFloat(d.close),
+          volume: parseInt(d.volume)
+        }))
+      } catch (sinaErr) {
+        console.error(`[Sina] A股K线降级也失败 ${code}:`, sinaErr.message)
+        return []
+      }
     }
-    
-    return data.map(d => ({
-      tradeDate: d.day,
-      openPrice: parseFloat(d.open),
-      highPrice: parseFloat(d.high),
-      lowPrice: parseFloat(d.low),
-      closePrice: parseFloat(d.close),
-      volume: parseInt(d.volume)
-    }))
   }
 
   if (marketType == 2) {

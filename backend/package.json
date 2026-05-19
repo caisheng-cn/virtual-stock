@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "build": "node scripts/bump-version.js patch && node src/index.js",
+    "build": "node ../scripts/bump-version.js patch && node src/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

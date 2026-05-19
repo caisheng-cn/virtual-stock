@@ -38,6 +38,11 @@ const User = sequelize.define('User', {
    admin_access: { type: DataTypes.TINYINT, defaultValue: 0 },
    last_trade_date: { type: DataTypes.DATEONLY },
    language: { type: DataTypes.STRING(10), defaultValue: 'zh-CN' },
+   is_ai: { type: DataTypes.TINYINT, defaultValue: 0 },
+   ai_personality: { type: DataTypes.STRING(20), defaultValue: '' },
+   ai_config_id: { type: DataTypes.INTEGER, defaultValue: 0 },
+   daily_trade_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+   daily_trade_date: { type: DataTypes.DATEONLY },
    created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
    updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'users', timestamps: false })
@@ -241,14 +246,14 @@ const LoginHistory = sequelize.define('LoginHistory', {
 /**
  * MarketConfig model — table: market_config
  * Market trading hours and refresh schedule per market type.
- * Fields: id, market_type, refresh_time, trade_start, trade_end, enabled, created_at
+ * Fields: id, market_type, refresh_time, forbid_start, forbid_end, enabled, created_at
  */
 const MarketConfig = sequelize.define('MarketConfig', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   market_type: { type: DataTypes.TINYINT, allowNull: false },
   refresh_time: { type: DataTypes.STRING(10) },
-  trade_start: { type: DataTypes.STRING(10) },
-  trade_end: { type: DataTypes.STRING(10) },
+  forbid_start: { type: DataTypes.STRING(10) },
+  forbid_end: { type: DataTypes.STRING(10) },
   enabled: { type: DataTypes.TINYINT, defaultValue: 1 },
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'market_config', timestamps: false })
@@ -451,6 +456,46 @@ const OptionTransaction = sequelize.define('OptionTransaction', {
 }, { tableName: 'option_transactions', timestamps: false })
 
 /**
+ * AiLlmConfig model — table: ai_llm_configs
+ * LLM API configuration for AI users.
+ */
+const AiLlmConfig = sequelize.define('AiLlmConfig', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  config_name: { type: DataTypes.STRING(50), allowNull: false },
+  api_url: { type: DataTypes.STRING(500), allowNull: false },
+  api_key: { type: DataTypes.STRING(500), allowNull: false },
+  model_name: { type: DataTypes.STRING(100), defaultValue: 'gpt-3.5-turbo' },
+  max_tokens: { type: DataTypes.INTEGER, defaultValue: 2000 },
+  temperature: { type: DataTypes.DECIMAL(3, 2), defaultValue: 0.7 },
+  personality_prompts: { type: DataTypes.TEXT },
+  status: { type: DataTypes.TINYINT, defaultValue: 1 },
+  created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, { tableName: 'ai_llm_configs', timestamps: false })
+
+/**
+ * AiTradeLog model — table: ai_trade_logs
+ * Records AI user trading decisions and social interactions.
+ */
+const AiTradeLog = sequelize.define('AiTradeLog', {
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
+  user_id: { type: DataTypes.INTEGER, allowNull: false },
+  group_id: { type: DataTypes.INTEGER, allowNull: false },
+  interaction_type: { type: DataTypes.STRING(10), defaultValue: '' },
+  decision: { type: DataTypes.STRING(10), defaultValue: '' },
+  stock_code: { type: DataTypes.STRING(20), defaultValue: '' },
+  market_type: { type: DataTypes.TINYINT, defaultValue: 0 },
+  shares: { type: DataTypes.INTEGER, defaultValue: 0 },
+  reason: { type: DataTypes.TEXT },
+  llm_response: { type: DataTypes.TEXT },
+  executed: { type: DataTypes.TINYINT, defaultValue: 0 },
+  trade_id: { type: DataTypes.BIGINT, defaultValue: 0 },
+  target_message_id: { type: DataTypes.INTEGER, defaultValue: 0 },
+  reply_content: { type: DataTypes.TEXT },
+  created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, { tableName: 'ai_trade_logs', timestamps: false })
+
+/**
  * OptionPrice model — table: option_prices
  * Daily pricing snapshots for option contracts (premium, Greeks).
  */
@@ -478,6 +523,21 @@ const OptionPrice = sequelize.define('OptionPrice', {
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'option_prices', timestamps: false })
 
+/**
+ * AdminAnnouncement model — table: admin_announcements
+ * Admin-editable announcements shown on home page bulletin board.
+ * Fields: id, content_zh_cn, content_zh_tw, content_en, enabled, created_at, updated_at
+ */
+const AdminAnnouncement = sequelize.define('AdminAnnouncement', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  content_zh_cn: { type: DataTypes.TEXT },
+  content_zh_tw: { type: DataTypes.TEXT },
+  content_en: { type: DataTypes.TEXT },
+  enabled: { type: DataTypes.TINYINT, defaultValue: 1 },
+  created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, { tableName: 'admin_announcements', timestamps: false })
+
 module.exports = {
   sequelize,
   User,
@@ -504,5 +564,8 @@ module.exports = {
   OptionPosition,
   OptionTransaction,
   OptionPrice,
-  SchedulerConfig
+  SchedulerConfig,
+  AiLlmConfig,
+  AiTradeLog,
+  AdminAnnouncement
 }

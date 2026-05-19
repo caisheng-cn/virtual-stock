@@ -9,9 +9,10 @@
  */
 
 const express = require('express')
-const { StockPool, StockPrice, StockPricesCache, sequelize, CommissionConfig } = require('../models')
+const { StockPool, StockPrice, StockPricesCache, sequelize, CommissionConfig, MarketConfig, AdminAnnouncement } = require('../models')
 const auth = require('../utils/auth')
 const stockService = require('../services/stock')
+const { EXCHANGE_RATES } = require('../utils/currency')
 
 const router = express.Router()
 
@@ -143,6 +144,43 @@ router.get('/commission-configs', async (req, res) => {
   try {
     const configs = await CommissionConfig.findAll()
     res.json({ code: 0, data: configs })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * GET /api/v1/stocks/market-config
+ * Get market forbidden trading hours and refresh times (public).
+ * Response: { code, data: MarketConfig[] }
+ */
+router.get('/market-config', async (req, res) => {
+  try {
+    const configs = await MarketConfig.findAll()
+    res.json({ code: 0, data: configs })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * GET /api/v1/stocks/exchange-rates
+ * Get current exchange rates (public).
+ * Response: { code, data: { USD_TO_CNY, HKD_TO_CNY } }
+ */
+router.get('/exchange-rates', async (req, res) => {
+  res.json({ code: 0, data: EXCHANGE_RATES })
+})
+
+/**
+ * GET /api/v1/stocks/announcement
+ * Get the latest enabled admin announcement (public).
+ * Response: { code, data: AdminAnnouncement|null }
+ */
+router.get('/announcement', async (req, res) => {
+  try {
+    const ann = await AdminAnnouncement.findOne({ where: { enabled: 1 }, order: [['id', 'DESC']] })
+    res.json({ code: 0, data: ann })
   } catch (err) {
     res.json({ code: -1, message: err.message })
   }

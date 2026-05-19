@@ -49,3 +49,9 @@ export const getStockHistory = (code, marketType, options = {}) => {
  * @returns {Promise<Object>} Response containing commission configs
  */
 export const getCommissionConfigs = () => request.get('/stocks/commission-configs')
+
+export const getMarketConfig = () => request.get('/stocks/market-config')
+
+export const getExchangeRates = () => request.get('/stocks/exchange-rates')
+
+export const getAnnouncement = () => request.get('/stocks/announcement')
