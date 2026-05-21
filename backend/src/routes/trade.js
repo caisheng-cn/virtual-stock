@@ -16,6 +16,7 @@ const auth = require('../utils/auth')
 const stockService = require('../services/stock')
 const commissionService = require('../services/commission')
 const { toCNY } = require('../utils/currency')
+const { isTradeTimeBlocked } = require('../utils/marketTime')
 
 const router = express.Router()
 
@@ -96,28 +97,9 @@ const checkTradeEnabled = async (user, res) => {
  * @returns {Promise<Object|null>} JSON response if within forbidden period, null if allowed
  */
 const checkTradeTime = async (marketType, res) => {
-   const config = await MarketConfig.findOne({ where: { market_type: marketType } })
-   if (!config) {
-     return res.json({ code: -1, message: res.t('trade.market_config_missing') })
-   }
-   // If trading time restriction is disabled (enabled: 0), skip check
-   if (config.enabled === 0) {
-     return null
-   }
-   const now = new Date()
-   const currentTime = now.toTimeString().slice(0, 5)
-   const fs = config.forbid_start
-   const fe = config.forbid_end
-   if (fs <= fe) {
-     // Same-day forbidden period
-     if (currentTime >= fs && currentTime <= fe) {
-       return res.json({ code: -1, message: res.t('trade.trade_disabled_time') })
-     }
-   } else {
-     // Cross-day forbidden period (e.g. 20:00 - 05:00)
-     if (currentTime >= fs || currentTime <= fe) {
-       return res.json({ code: -1, message: res.t('trade.trade_disabled_time') })
-     }
+   const blocked = await isTradeTimeBlocked(marketType)
+   if (blocked) {
+     return res.json({ code: -1, message: res.t('trade.trade_disabled_time') })
    }
    return null
  }

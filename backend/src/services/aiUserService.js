@@ -24,12 +24,7 @@ function getRandomNickname(personality) {
   return names[Math.floor(Math.random() * names.length)]
 }
 
-function generateUsername(personality, groupId) {
-  const prefix = { conservative: 'c', random: 'r', aggressive: 'a' }
-  return `ai_${prefix[personality] || 'r'}_${groupId}_${Date.now().toString().slice(-4)}`
-}
-
-async function generateAIUsers(groupId, configId) {
+async function generateAIUsers(groupId, configId, count = 3) {
   const group = await Group.findByPk(groupId)
   if (!group) {
     throw new Error('群组不存在')
@@ -40,23 +35,13 @@ async function generateAIUsers(groupId, configId) {
     throw new Error('LLM配置不存在或已禁用')
   }
 
-  const existingUGs = await UserGroup.findAll({ where: { group_id: groupId }, raw: true })
-  const existingUserIds = existingUGs.map(ug => ug.user_id)
-  const existingAIs = existingUserIds.length > 0
-    ? await User.findAll({ where: { id: existingUserIds, is_ai: 1 }, raw: true })
-    : []
-
   const personalities = ['conservative', 'random', 'aggressive']
   const createdUsers = []
+  const ts = Date.now().toString().slice(-4)
 
-  for (const personality of personalities) {
-    const existingOfType = existingAIs.find(u => u.ai_personality === personality)
-    if (existingOfType) {
-      createdUsers.push(existingOfType)
-      continue
-    }
-
-    const username = generateUsername(personality, groupId)
+  for (let i = 0; i < count; i++) {
+    const personality = personalities[i % 3]
+    const username = `ai_${personality[0]}_${groupId}_${ts}_${i}`
     const nickname = getRandomNickname(personality)
 
     const password = await bcrypt.hash('ai_user_2024', 10)
@@ -123,7 +108,7 @@ async function getAIUsersByGroup(groupId) {
   const users = await User.findAll({
     where: { id: userIds, is_ai: 1 },
     attributes: ['id', 'username', 'nickname', 'ai_personality', 'ai_config_id',
-      'status', 'trade_enabled', 'daily_trade_count', 'daily_trade_date', 'created_at'],
+      'personality_prompt', 'status', 'trade_enabled', 'daily_trade_count', 'daily_trade_date', 'created_at'],
     raw: true
   })
 
@@ -135,6 +120,7 @@ async function getAIUsersByGroup(groupId) {
       username: u.username,
       nickname: u.nickname,
       personality: u.ai_personality,
+      personality_prompt: u.personality_prompt,
       status: u.status,
       trade_enabled: u.trade_enabled,
       daily_trade_count: u.daily_trade_count,
@@ -150,7 +136,7 @@ async function getAllAIUsers() {
   const users = await User.findAll({
     where: { is_ai: 1 },
     attributes: ['id', 'username', 'nickname', 'ai_personality', 'ai_config_id',
-      'status', 'trade_enabled', 'daily_trade_count', 'daily_trade_date', 'created_at'],
+      'personality_prompt', 'status', 'trade_enabled', 'daily_trade_count', 'daily_trade_date', 'created_at'],
     raw: true
   })
 
@@ -165,6 +151,7 @@ async function getAllAIUsers() {
       username: u.username,
       nickname: u.nickname,
       personality: u.ai_personality,
+      personality_prompt: u.personality_prompt,
       group_id: ug ? ug.group_id : null,
       group_name: group ? group.name : '',
       config_name: config ? config.config_name : '',

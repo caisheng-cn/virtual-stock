@@ -1,7 +1,12 @@
 {
-  "version": "3.0.9",
+  "version": "3.0.30",
   "copyright": "caisheng.cn@gmail.com",
   "changelog": [
+    {
+      "ver": "3.0.30",
+      "date": "2026-05-21",
+      "desc": "所有股票价格接口都采用从数据库中获得，取消实时接口调用。"
+    },
     {
       "ver": "3.0.9",
       "date": "2026-05-18",

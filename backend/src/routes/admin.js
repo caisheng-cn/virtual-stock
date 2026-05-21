@@ -1797,7 +1797,7 @@ router.get('/ai/config', async (req, res) => {
  */
 router.post('/ai/config', async (req, res) => {
   try {
-    const { config_name, api_url, api_key, model_name, max_tokens, temperature, personality_prompts } = req.body
+    const { config_name, api_url, api_key, model_name, max_tokens, temperature, timeout, personality_prompts } = req.body
     if (!config_name || !api_url || !api_key) {
       return res.json({ code: -1, message: '参数不完整' })
     }
@@ -1806,6 +1806,7 @@ router.post('/ai/config', async (req, res) => {
       model_name: model_name || 'gpt-3.5-turbo',
       max_tokens: parseInt(max_tokens) || 2000,
       temperature: parseFloat(temperature) || 0.7,
+      timeout: parseInt(timeout) || 30,
       personality_prompts: personality_prompts ? JSON.stringify(personality_prompts) : null
     })
     res.json({ code: 0, data: config })
@@ -1819,7 +1820,7 @@ router.post('/ai/config', async (req, res) => {
  */
 router.put('/ai/config/:id', async (req, res) => {
   try {
-    const { config_name, api_url, api_key, model_name, max_tokens, temperature, status, personality_prompts } = req.body
+    const { config_name, api_url, api_key, model_name, max_tokens, temperature, timeout, status, personality_prompts } = req.body
     const update = {}
     if (config_name !== undefined) update.config_name = config_name
     if (api_url !== undefined) update.api_url = api_url
@@ -1827,6 +1828,7 @@ router.put('/ai/config/:id', async (req, res) => {
     if (model_name !== undefined) update.model_name = model_name
     if (max_tokens !== undefined) update.max_tokens = parseInt(max_tokens)
     if (temperature !== undefined) update.temperature = parseFloat(temperature)
+    if (timeout !== undefined) update.timeout = parseInt(timeout)
     if (status !== undefined) update.status = parseInt(status)
     if (personality_prompts !== undefined) update.personality_prompts = JSON.stringify(personality_prompts)
 
@@ -1884,13 +1886,13 @@ router.get('/ai/users', async (req, res) => {
  */
 router.post('/ai/generate/:groupId', async (req, res) => {
   try {
-    const { config_id } = req.body
+    const { config_id, count } = req.body
     const groupId = req.params.groupId
     if (!config_id) {
       return res.json({ code: -1, message: '请选择LLM配置' })
     }
     const aiUserService = require('../services/aiUserService')
-    const users = await aiUserService.generateAIUsers(parseInt(groupId), parseInt(config_id))
+    const users = await aiUserService.generateAIUsers(parseInt(groupId), parseInt(config_id), parseInt(count) || 3)
     res.json({ code: 0, data: users })
   } catch (err) {
     res.json({ code: -1, message: err.message })
@@ -1902,14 +1904,14 @@ router.post('/ai/generate/:groupId', async (req, res) => {
  */
 router.post('/ai/regenerate/:groupId', async (req, res) => {
   try {
-    const { config_id } = req.body
+    const { config_id, count } = req.body
     const groupId = req.params.groupId
     if (!config_id) {
       return res.json({ code: -1, message: '请选择LLM配置' })
     }
     const aiUserService = require('../services/aiUserService')
     await aiUserService.removeAIUsers(parseInt(groupId))
-    const users = await aiUserService.generateAIUsers(parseInt(groupId), parseInt(config_id))
+    const users = await aiUserService.generateAIUsers(parseInt(groupId), parseInt(config_id), parseInt(count) || 3)
     res.json({ code: 0, data: users })
   } catch (err) {
     res.json({ code: -1, message: err.message })
@@ -1945,20 +1947,33 @@ router.post('/ai/trigger', async (req, res) => {
 })
 
 /**
- * PUT /api/v1/admin/ai/users/:id - 编辑AI用户昵称
+ * PUT /api/v1/admin/ai/users/:id - 编辑AI用户昵称或提示词
  */
 router.put('/ai/users/:id', async (req, res) => {
   try {
-    const { nickname } = req.body
-    if (!nickname) {
-      return res.json({ code: -1, message: '昵称不能为空' })
+    const { nickname, personality_prompt, status } = req.body
+    const updateData = {}
+    if (nickname !== undefined) {
+      if (!nickname) {
+        return res.json({ code: -1, message: '昵称不能为空' })
+      }
+      updateData.nickname = nickname
+    }
+    if (personality_prompt !== undefined) {
+      updateData.personality_prompt = personality_prompt
+    }
+    if (status !== undefined) {
+      updateData.status = parseInt(status)
+    }
+    if (Object.keys(updateData).length === 0) {
+      return res.json({ code: -1, message: '没有需要更新的字段' })
     }
     const user = await User.findByPk(req.params.id)
     if (!user || !user.is_ai) {
       return res.json({ code: -1, message: 'AI用户不存在' })
     }
-    await User.update({ nickname }, { where: { id: req.params.id } })
-    res.json({ code: 0, message: '昵称已更新' })
+    await User.update(updateData, { where: { id: req.params.id } })
+    res.json({ code: 0, message: '已更新' })
   } catch (err) {
     res.json({ code: -1, message: err.message })
   }

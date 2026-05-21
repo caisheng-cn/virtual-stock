@@ -742,7 +742,7 @@
             <template #header>
               <div class="card-header">
                 <span>LLM 配置</span>
-                <el-button type="primary" @click="showAiConfigDialog = true; editingAiConfigId = null; Object.assign(aiConfigForm, { config_name: '', api_url: '', api_key: '', model_name: 'gpt-3.5-turbo', max_tokens: 2000, temperature: 0.7, personality_prompts: { ...DEFAULT_AI_PROMPTS } })">新增配置</el-button>
+                <el-button type="primary" @click="showAiConfigDialog = true; editingAiConfigId = null; Object.assign(aiConfigForm, { config_name: '', api_url: '', api_key: '', model_name: 'gpt-3.5-turbo', max_tokens: 2000, temperature: 0.7, timeout: 30, personality_prompts: { ...DEFAULT_AI_PROMPTS } })">新增配置</el-button>
               </div>
             </template>
             <el-table :data="aiConfigList" stripe v-loading="aiConfigLoading">
@@ -754,7 +754,8 @@
               </el-table-column>
               <el-table-column prop="model_name" label="模型" width="150" />
               <el-table-column prop="max_tokens" label="Max Tokens" width="100" />
-              <el-table-column prop="temperature" label="Temperature" width="100" />
+              <el-table-column prop="temperature" label="Temp" width="70" />
+              <el-table-column prop="timeout" label="超时(s)" width="80" />
               <el-table-column label="状态" width="80">
                 <template #default="{ row }">
                   <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
@@ -802,7 +803,8 @@
               <el-table-column prop="personality" label="风格" width="80">
                 <template #default="{ row }">{{ row.personality === 'conservative' ? '保守型' : row.personality === 'aggressive' ? '激进型' : '随机型' }}</template>
               </el-table-column>
-              <el-table-column prop="group_name" label="所属群组" width="120" />
+              <el-table-column prop="group_id" label="群组编号" width="80" />
+              <el-table-column prop="group_name" label="群组名称" width="120" />
               <el-table-column prop="config_name" label="LLM配置" width="120" />
               <el-table-column prop="init_cash" label="初始资金" width="100">
                 <template #default="{ row }">¥{{ formatMoney(row.init_cash) }}</template>
@@ -818,7 +820,23 @@
                   </el-tag>
                 </template>
               </el-table-column>
+              <el-table-column label="操作" width="300">
+                <template #default="{ row }">
+                  <el-button size="small" :type="row.status === 1 ? 'warning' : 'success'" @click="toggleAiUserStatus(row)">
+                    {{ row.status === 1 ? '禁用' : '启用' }}
+                  </el-button>
+                  <el-button size="small" @click="editAiUserPrompt(row)">编辑提示词</el-button>
+                </template>
+              </el-table-column>
             </el-table>
+
+            <el-dialog v-model="aiPromptDialogVisible" title="编辑 AI 用户提示词" width="600px">
+              <el-input v-model="aiPromptEditingText" type="textarea" :rows="10" placeholder="输入该用户的专属提示词（留空则使用配置级提示词）" />
+              <template #footer>
+                <el-button @click="aiPromptDialogVisible = false">取消</el-button>
+                <el-button type="primary" :loading="aiPromptSaving" @click="saveAiUserPrompt">保存</el-button>
+              </template>
+            </el-dialog>
           </el-card>
 
           <el-card style="margin-top: 16px">
@@ -828,12 +846,17 @@
             <el-table :data="groupList" stripe>
               <el-table-column prop="id" label="群组ID" width="80" />
               <el-table-column prop="name" label="群组名称" />
-              <el-table-column label="当前AI用户" width="120">
+              <el-table-column label="当前AI用户" width="100">
                 <template #default="{ row }">
-                  {{ aiUserList.filter(u => u.group_id === row.id).length }} / 3
+                  {{ aiUserList.filter(u => u.group_id === row.id).length }}
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="300">
+              <el-table-column label="生成数量" width="100">
+                <template #default="{ row }">
+                  <el-input-number :model-value="aiGenerateCountMap[row.id] || 3" @update:model-value="val => aiGenerateCountMap[row.id] = val" :min="1" :max="50" size="small" controls-position="right" style="width:90px" />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="360">
                 <template #default="{ row }">
                   <el-select v-model="aiGenerateConfigId" placeholder="选择LLM配置" size="small" style="width:140px;margin-right:8px">
                     <el-option v-for="c in aiConfigList" :key="c.id" :label="c.config_name" :value="c.id" />
@@ -1173,6 +1196,9 @@
         <el-form-item label="Temperature">
           <el-slider v-model="aiConfigForm.temperature" :min="0" :max="2" :step="0.1" style="width: 200px" />
         </el-form-item>
+        <el-form-item label="超时时间(秒)">
+          <el-input-number v-model="aiConfigForm.timeout" :min="5" :max="300" :step="5" />
+        </el-form-item>
         <el-form-item label="风格提示词">
           <div style="font-size:12px;color:#999;margin-bottom:8px">修改后将覆盖该风格 AI 用户的默认提示词，保存后即时生效</div>
           <el-collapse style="width: 100%">
@@ -1423,7 +1449,7 @@ import { useRouter } from 'vue-router'
 import { i18n } from '@/i18n'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getStats, getGroups, createGroup as createGroupAPI, deleteGroup as deleteGroupAPI, getUsers, toggleUserStatus as toggleUserStatusAPI, deleteUser as deleteUserAPI, getStocks, getStockPositions, createStock as createStockAPI, deleteStock as deleteStockAPI, getInviteCodes, createInviteCode, getCommissionConfigs, updateCommissionConfig, getCommissionHistory, getMarketConfig, updateMarketConfig, getMissingStocks, getGroupStatistics, getUserStatistics, getUserDetail, getUserLoginHistory, getUserTransactions, setTradeEnabled, setAdminAccess, getGroupUsers as getGroupUsersAPI, addGroupUser as addGroupUserAPI, removeGroupUser as removeGroupUserAPI, payDividend, doAllotment, getUserFundFlow, startStockSync, getStockSyncProgress, getStockSyncHistory, getStockSyncDetail, cancelStockSync, getOptionWhitelist, addOptionWhitelist, deleteOptionWhitelist, toggleOptionWhitelistStatus, getOptionContracts, generateOptionContracts, syncOptionData, getSyncProgress, getSchedulerConfigs, updateSchedulerConfig, reloadScheduler, getAiConfigs, createAiConfig, updateAiConfig, deleteAiConfig, testAiConnection, getAiUsers, generateAiUsers as generateAiUsersAPI, regenerateAiUsers as regenerateAiUsersAPI, triggerAiTrade as triggerAiTradeAPI, getAiLogs, updateAiUserNickname, getAnnouncementAdmin, saveAnnouncement, translateAnnouncement as translateAnnouncementAPI } from '@/api/admin'
+import { getStats, getGroups, createGroup as createGroupAPI, deleteGroup as deleteGroupAPI, getUsers, toggleUserStatus as toggleUserStatusAPI, deleteUser as deleteUserAPI, getStocks, getStockPositions, createStock as createStockAPI, deleteStock as deleteStockAPI, getInviteCodes, createInviteCode, getCommissionConfigs, updateCommissionConfig, getCommissionHistory, getMarketConfig, updateMarketConfig, getMissingStocks, getGroupStatistics, getUserStatistics, getUserDetail, getUserLoginHistory, getUserTransactions, setTradeEnabled, setAdminAccess, getGroupUsers as getGroupUsersAPI, addGroupUser as addGroupUserAPI, removeGroupUser as removeGroupUserAPI, payDividend, doAllotment, getUserFundFlow, startStockSync, getStockSyncProgress, getStockSyncHistory, getStockSyncDetail, cancelStockSync, getOptionWhitelist, addOptionWhitelist, deleteOptionWhitelist, toggleOptionWhitelistStatus, getOptionContracts, generateOptionContracts, syncOptionData, getSyncProgress, getSchedulerConfigs, updateSchedulerConfig, reloadScheduler, getAiConfigs, createAiConfig, updateAiConfig, deleteAiConfig, testAiConnection, getAiUsers, generateAiUsers as generateAiUsersAPI, regenerateAiUsers as regenerateAiUsersAPI, triggerAiTrade as triggerAiTradeAPI, getAiLogs, updateAiUserNickname, updateAiUserPrompt, setAiUserStatus, getAnnouncementAdmin, saveAnnouncement, translateAnnouncement as translateAnnouncementAPI } from '@/api/admin'
 import { getVersion } from '@/api/about'
 
 const DEFAULT_AI_PROMPTS = {
@@ -1487,18 +1513,23 @@ const aiConfigList = ref([])
 const aiConfigLoading = ref(false)
 const showAiConfigDialog = ref(false)
 const editingAiConfigId = ref(null)
-const aiConfigForm = reactive({ config_name: '', api_url: '', api_key: '', model_name: 'gpt-3.5-turbo', max_tokens: 2000, temperature: 0.7, personality_prompts: { ...DEFAULT_AI_PROMPTS } })
+const aiConfigForm = reactive({ config_name: '', api_url: '', api_key: '', model_name: 'gpt-3.5-turbo', max_tokens: 2000, temperature: 0.7, timeout: 30, personality_prompts: { ...DEFAULT_AI_PROMPTS } })
 const aiTesting = ref(false)
 
 // AI 用户
 const aiUserList = ref([])
 const aiUserLoading = ref(false)
 const aiGenerateConfigId = ref(null)
+const aiGenerateCountMap = ref({})
 const aiTriggering = ref(false)
 const aiLogList = ref([])
 const aiLogLoading = ref(false)
 const editingAiNicknameId = ref(null)
 const editingAiNickname = ref('')
+const aiPromptDialogVisible = ref(false)
+const aiPromptEditingText = ref('')
+const aiPromptEditingUserId = ref(null)
+const aiPromptSaving = ref(false)
 const allotmentStock = ref(null)
 const dividendAmount = ref(0.1)
 const allotmentShares = ref(1)
@@ -2738,6 +2769,7 @@ const editAiConfig = (row) => {
   aiConfigForm.model_name = row.model_name
   aiConfigForm.max_tokens = row.max_tokens
   aiConfigForm.temperature = row.temperature
+  aiConfigForm.timeout = row.timeout || 30
   aiConfigForm.personality_prompts = row.personality_prompts && (row.personality_prompts.conservative || row.personality_prompts.random || row.personality_prompts.aggressive)
     ? { ...row.personality_prompts }
     : { ...DEFAULT_AI_PROMPTS }
@@ -2816,10 +2848,11 @@ const handleGenerateAiUsers = async (groupId) => {
     ElMessage.warning('请先选择LLM配置')
     return
   }
+  const count = aiGenerateCountMap.value[groupId] || 3
   try {
-    const res = await generateAiUsersAPI(groupId, aiGenerateConfigId.value)
+    const res = await generateAiUsersAPI(groupId, aiGenerateConfigId.value, count)
     if (res.code === 0) {
-      ElMessage.success('AI用户生成成功')
+      ElMessage.success(`已生成 ${res.data.length} 个AI用户`)
       fetchAiUsers()
     } else {
       ElMessage.error(res.message || '生成失败')
@@ -2834,13 +2867,14 @@ const handleRegenerateAiUsers = async (groupId) => {
     ElMessage.warning('请先选择LLM配置')
     return
   }
+  const count = aiGenerateCountMap.value[groupId] || 3
   try {
-    await ElMessageBox.confirm('重新生成会删除现有AI用户并创建新的，确定继续？', '确认', { type: 'warning' })
+    await ElMessageBox.confirm(`将删除该群组所有AI用户并重新生成 ${count} 个，确定继续？`, '确认', { type: 'warning' })
   } catch { return }
   try {
-    const res = await regenerateAiUsersAPI(groupId, aiGenerateConfigId.value)
+    const res = await regenerateAiUsersAPI(groupId, aiGenerateConfigId.value, count)
     if (res.code === 0) {
-      ElMessage.success('AI用户重新生成成功')
+      ElMessage.success(`已重新生成 ${res.data.length} 个AI用户`)
       fetchAiUsers()
     } else {
       ElMessage.error(res.message || '重新生成失败')
@@ -2892,6 +2926,57 @@ const fetchGroups = async () => {
 const editAiNickname = (row) => {
   editingAiNicknameId.value = row.id
   editingAiNickname.value = row.nickname
+}
+
+const editAiUserPrompt = (row) => {
+  aiPromptEditingUserId.value = row.id
+  if (row.personality_prompt) {
+    aiPromptEditingText.value = row.personality_prompt
+  } else {
+    const config = aiConfigList.value.find(c => c.id === row.ai_config_id)
+    if (config && config.personality_prompts && config.personality_prompts[row.personality]) {
+      aiPromptEditingText.value = config.personality_prompts[row.personality]
+    } else {
+      aiPromptEditingText.value = ''
+    }
+  }
+  aiPromptDialogVisible.value = true
+}
+
+const toggleAiUserStatus = async (row) => {
+  const newStatus = row.status === 1 ? 0 : 1
+  const label = newStatus === 1 ? '启用' : '禁用'
+  try {
+    await ElMessageBox.confirm(`确定${label}该AI用户？`, '确认', { type: 'warning' })
+  } catch { return }
+  try {
+    const res = await setAiUserStatus(row.id, newStatus)
+    if (res.code === 0) {
+      ElMessage.success(`已${label}`)
+      fetchAiUsers()
+    } else {
+      ElMessage.error(res.message || '操作失败')
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '操作失败')
+  }
+}
+
+const saveAiUserPrompt = async () => {
+  aiPromptSaving.value = true
+  try {
+    const res = await updateAiUserPrompt(aiPromptEditingUserId.value, aiPromptEditingText.value || '')
+    if (res.code === 0) {
+      ElMessage.success('提示词已更新')
+      aiPromptDialogVisible.value = false
+      fetchAiUsers()
+    } else {
+      ElMessage.error(res.message || '更新失败')
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '更新失败')
+  }
+  aiPromptSaving.value = false
 }
 
 const saveAiNickname = async (row) => {

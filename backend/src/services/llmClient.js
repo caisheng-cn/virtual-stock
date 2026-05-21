@@ -4,7 +4,7 @@ async function callLLM(config, messages, options = {}) {
   const {
     maxTokens = config.max_tokens || 2000,
     temperature = config.temperature || 0.7,
-    timeout = 30000
+    timeout = (config.timeout || 30) * 1000
   } = options
 
   const response = await axios.post(

@@ -1,12 +1,33 @@
 const { Op } = require('sequelize')
 const {
   User, GroupMessage, MessageReply, MessageLike,
-  AiLlmConfig, AiTradeLog, UserBalance, Position
+  AiLlmConfig, AiTradeLog, UserBalance, Position, MarketConfig
 } = require('../models')
 const { callLLM } = require('./llmClient')
 
 const MAX_REPLIES_PER_DAY = 15
 const MAX_LIKES_PER_HOUR = 5
+
+const MARKET_LABELS = { 1: 'A股', 2: '港股', 3: '美股' }
+
+async function getMarketStatusText() {
+  const configs = await MarketConfig.findAll({ raw: true })
+  const now = new Date()
+  const current = now.toTimeString().slice(0, 5)
+  return configs
+    .filter(c => c.enabled === 1 && MARKET_LABELS[c.market_type])
+    .map(c => {
+      const isCrossDay = c.forbid_start > c.forbid_end
+      let isBlocked
+      if (isCrossDay) {
+        isBlocked = current >= c.forbid_start || current <= c.forbid_end
+      } else {
+        isBlocked = current >= c.forbid_start && current <= c.forbid_end
+      }
+      const status = isBlocked ? '禁止交易' : '交易中'
+      return `- ${MARKET_LABELS[c.market_type]}: ${status}（禁止时段 ${c.forbid_start}~${c.forbid_end}）`
+    }).join('\n')
+}
 
 async function getRemainingLimits(userId) {
   const oneHourAgo = new Date(Date.now() - 3600000)
@@ -28,9 +49,12 @@ async function buildContext(userId) {
     Position.findAll({ where: { user_id: userId, shares: { [Op.gt]: 0 } }, raw: true })
   ])
   const cash = balance ? parseFloat(balance.cash) : 0
-  const positionsText = positions.length > 0
-    ? positions.map(p => `${p.stock_code} ${parseFloat(p.shares).toFixed(0)}股`).join(', ')
+  const sorted = positions.sort((a, b) => parseFloat(b.shares || 0) - parseFloat(a.shares || 0))
+  const top = sorted.slice(0, 5)
+  let positionsText = top.length > 0
+    ? top.map(p => `${p.stock_code} ${p.stock_name || p.stock_code} ${parseFloat(p.shares).toFixed(0)}股`).join(', ')
     : '暂无持仓'
+  if (sorted.length > 5) positionsText += ` (共${sorted.length}只)`
   return { cash, positionsText }
 }
 
@@ -46,15 +70,20 @@ async function processCandidate(userId, groupId, candidate, user, config, limits
   if (isTrade) {
     const typeLabel = msg.message_type === 1 ? '买入' : '卖出'
     const { cash, positionsText } = await buildContext(userId)
+    const marketStatusText = await getMarketStatusText()
     systemMsg = `你是${user.nickname || user.username}，一名股票投资者。
 你的当前持仓: ${positionsText}
 你的可用资金: ¥${cash.toFixed(2)}
+
+注意：这是一个虚拟股市交易平台，所有交易均为模拟操作，与实际股市存在差异。
+各市场当前状态（北京时间）：
+${marketStatusText}
 
 群组中有用户的交易动态:
 ${realUserName} ${typeLabel} ${msg.stock_code} ${msg.stock_name || ''} ${msg.shares}股 单价¥${parseFloat(msg.price || 0).toFixed(2)}
 
 请分析这笔交易并决定是否回复和点赞。
-回复内容需要包含具体的投资逻辑分析（支持或反对的理由）。
+  回复内容请简短（1-3句话即可），需要包含具体的投资逻辑分析（支持或反对的理由）。
 
 回复格式必须是严格的JSON（不要包含其他文字）:
 {"reply": true或false, "content": "回复内容（reply为true时必填）", "like": true或false}`
@@ -73,7 +102,7 @@ ${realUserName} ${typeLabel} ${msg.stock_code} ${msg.stock_name || ''} ${msg.sha
     const result = await callLLM(config, [
       { role: 'system', content: systemMsg },
       { role: 'user', content: isTrade ? `请分析${realUserName}的这笔交易，给出你的看法。` : `请回复${realUserName}的评论。` }
-    ])
+    ], { maxTokens: 12000 })
 
     const cleaned = result.content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
     const start = cleaned.indexOf('{')

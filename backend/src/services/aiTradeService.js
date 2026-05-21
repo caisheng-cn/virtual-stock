@@ -5,16 +5,56 @@ const {
 } = require('../models')
 const { Op } = require('sequelize')
 const { callLLM } = require('./llmClient')
-const stockService = require('./stock')
 const commissionService = require('./commission')
-const stockPriceService = require('./stock')
 const { toCNY } = require('../utils/currency')
+const { isTradeTimeBlocked } = require('../utils/marketTime')
 
 const MARKET_LABELS = { 1: 'A股', 2: '港股', 3: '美股' }
 const PERSONALITY_LABELS = {
   conservative: '保守型',
   random: '随机型',
   aggressive: '激进型'
+}
+
+async function getMarketStatusText() {
+  const configs = await MarketConfig.findAll({ raw: true })
+  const now = new Date()
+  const current = now.toTimeString().slice(0, 5)
+  return configs
+    .filter(c => c.enabled === 1 && MARKET_LABELS[c.market_type])
+    .map(c => {
+      const isCrossDay = c.forbid_start > c.forbid_end
+      let isBlocked
+      if (isCrossDay) {
+        isBlocked = current >= c.forbid_start || current <= c.forbid_end
+      } else {
+        isBlocked = current >= c.forbid_start && current <= c.forbid_end
+      }
+      const status = isBlocked ? '禁止交易' : '交易中'
+      return `- ${MARKET_LABELS[c.market_type]}: ${status}（禁止时段 ${c.forbid_start}~${c.forbid_end}）`
+    }).join('\n')
+}
+
+async function getAIPrice(stockCode, marketType) {
+  const cache = await StockPricesCache.findOne({
+    where: { stock_code: stockCode, market_type: marketType },
+    order: [['trade_date', 'DESC']],
+    raw: true
+  })
+  if (cache && parseFloat(cache.close_price) > 0) {
+    return {
+      price: parseFloat(cache.close_price),
+      stockName: cache.stock_name || stockCode
+    }
+  }
+  const pool = await StockPool.findOne({
+    where: { stock_code: stockCode, market_type: marketType },
+    raw: true
+  })
+  if (pool) {
+    return { price: 0, stockName: pool.stock_name || stockCode }
+  }
+  throw new Error(`无法获取股票 ${stockCode} 的价格数据`)
 }
 
 function parseDecision(raw) {
@@ -102,7 +142,8 @@ const DEFAULT_PROMPTS = {
     '不能在同一天对同一支股票进行买入又卖出。'
 }
 
-function buildPersonalityPrompt(personality, config) {
+function buildPersonalityPrompt(personality, config, user) {
+  if (user && user.personality_prompt) return user.personality_prompt
   let customPrompts
   if (config && config.personality_prompts) {
     try {
@@ -158,16 +199,20 @@ async function processAIUser(userId, groupId) {
 
   const topCandidates = candidates
     .sort(() => Math.random() - 0.5)
-    .slice(0, 8)
-    .map(c => `${c.stock_code} ${c.stock_name} ${MARKET_LABELS[c.market_type]} ¥${c.close_price} (涨幅${c.change_percent}%)`)
+    .slice(0, 5)
+    .map(c => `${c.stock_code} ${c.stock_name} ${MARKET_LABELS[c.market_type]} ¥${c.close_price}(${c.change_percent}%)`)
 
-  const positionsText = positions.length > 0
-    ? positions.map(p =>
-        `${p.stock_code} ${p.stock_name} (${p.market_label}) ${p.shares}股 成本¥${p.avg_cost} 现价¥${p.current_price} 盈亏¥${p.profit}(${p.profit_rate}%)`
+  const sortedPositions = positions.sort((a, b) => parseFloat(b.market_value) - parseFloat(a.market_value))
+  const topPositions = sortedPositions.slice(0, 5)
+  let positionsText = topPositions.length > 0
+    ? topPositions.map(p =>
+        `${p.stock_code} ${p.stock_name} ${p.shares}股 成本¥${p.avg_cost} 现价¥${p.current_price} 浮动¥${p.profit}(${p.profit_rate}%)`
       ).join('\n')
     : '暂无持仓'
+  if (sortedPositions.length > 5) positionsText += `\n...(还有${sortedPositions.length - 5}只持仓未列出)`
 
-  const personalityDesc = buildPersonalityPrompt(user.ai_personality, config)
+  const personalityDesc = buildPersonalityPrompt(user.ai_personality, config, user)
+  const marketStatusText = await getMarketStatusText()
 
   const todayTrades = await Transaction.findAll({
     where: { user_id: userId, trade_date: today },
@@ -181,6 +226,10 @@ async function processAIUser(userId, groupId) {
 
   const systemMsg = `你是${user.nickname || user.username}，一个${PERSONALITY_LABELS[user.ai_personality] || '普通'}股票投资者。
 ${personalityDesc}
+
+注意：这是一个虚拟股市交易平台，所有交易均为模拟操作，与实际股市存在差异。
+各市场当前状态（北京时间）：
+${marketStatusText}
 
 当前账户概况：
 - 总资产: ¥${totalAssets.toFixed(2)}
@@ -255,6 +304,19 @@ ${topCandidates.join('\n')}
     const shares = parseInt(decision.shares)
     if (!shares || shares <= 0) {
       return { executed: false, reason: '无效的股数' }
+    }
+
+    const blocked = await isTradeTimeBlocked(targetStock.market_type)
+    if (blocked) {
+      await AiTradeLog.create({
+        user_id: userId, group_id: groupId,
+        interaction_type: 'trade', decision: 'time_blocked',
+        stock_code: decision.stock_code,
+        market_type: targetStock.market_type,
+        shares, reason: '当前时段禁止交易',
+        llm_response: result.content, executed: 0
+      })
+      return { executed: false, reason: '禁止交易时段' }
     }
 
     const priceInCNY = toCNY(targetStock.close_price, targetStock.market_type)
@@ -366,7 +428,7 @@ ${topCandidates.join('\n')}
 }
 
 async function executeBuy(userId, stockCode, marketType, shares, groupId, reason) {
-  const quote = await stockService.getQuote(stockCode, marketType)
+  const quote = await getAIPrice(stockCode, marketType)
   const priceInCNY = toCNY(quote.price, marketType)
   const amount = priceInCNY * shares
   const commissionRate = await commissionService.getCommissionRate(marketType, 1)
@@ -425,7 +487,7 @@ async function executeBuy(userId, stockCode, marketType, shares, groupId, reason
 }
 
 async function executeSell(userId, stockCode, marketType, shares, groupId, reason) {
-  const quote = await stockService.getQuote(stockCode, marketType)
+  const quote = await getAIPrice(stockCode, marketType)
   const priceInCNY = toCNY(quote.price, marketType)
   const amount = priceInCNY * shares
   const commissionRate = await commissionService.getCommissionRate(marketType, 2)
@@ -487,19 +549,27 @@ async function executeSell(userId, stockCode, marketType, shares, groupId, reaso
 
 async function createGroupMessage(userId, mType, code, name, marketType, shares, price, amount, reason) {
   try {
+    let stockName = name
+    if (!stockName || stockName === code || stockName.length <= 3) {
+      const pool = await StockPool.findOne({
+        where: { stock_code: code, market_type: marketType }
+      })
+      if (pool && pool.stock_name) stockName = pool.stock_name
+    }
+
     const userGroups = await UserGroup.findAll({ where: { user_id: userId } })
     if (userGroups.length === 0) return null
     const typeLabels = { 1: '买入', 2: '卖出', 3: '分红', 4: '配股' }
     const label = typeLabels[mType] || ''
     const marketLabels = { 1: 'A股', 2: '港股', 3: '美股' }
     const marketLabel = marketLabels[marketType] || ''
-    const displayContent = `${label} ${code} ${name} | ${marketLabel} | 单价¥${parseFloat(price || 0).toFixed(2)} × ${shares}股 = ¥${parseFloat(amount || 0).toFixed(2)}`
+    const displayContent = `${label} ${code} ${stockName} | ${marketLabel} | 单价¥${parseFloat(price || 0).toFixed(2)} × ${shares}股 = ¥${parseFloat(amount || 0).toFixed(2)}`
     let lastMsgId = null
     for (const ug of userGroups) {
       const msg = await GroupMessage.create({
         group_id: ug.group_id, user_id: userId,
         message_type: mType, stock_code: code,
-        stock_name: name, market_type: marketType,
+        stock_name: stockName, market_type: marketType,
         shares, price: parseFloat(price || 0),
         amount: parseFloat(amount || 0),
         content: displayContent

@@ -92,7 +92,7 @@
         </el-col>
       </el-row>
 
-      <el-card class="bulletin-card" v-if="bulletinData">
+      <el-card class="bulletin-card" v-if="marketStatus.length > 0 || bulletinAnnouncement || bulletinRates">
         <template #header>
           <div class="card-header">
             <span>📢 {{ $t('home.bulletin_title') }}</span>
@@ -103,10 +103,20 @@
         </div>
         <div class="bulletin-section">
           <div class="bulletin-section-title">⏰ {{ $t('home.bulletin_forbidden') }}</div>
-          <div v-for="item in bulletinForbidden" :key="item.market" class="bulletin-row">
-            <span class="bulletin-label">{{ item.market }}</span>
-            <span class="bulletin-value">{{ item.forbid_start }} ~ {{ item.forbid_end }}</span>
-            <el-tag :type="item.isCrossDay ? 'warning' : 'info'" size="small">{{ item.typeLabel }}</el-tag>
+          <div v-for="item in marketStatus" :key="item.market_type" class="bulletin-row" :class="{ blocked: item.is_blocked }">
+            <span class="bulletin-label">{{ item.market_label }}</span>
+            <el-tag :type="item.is_blocked ? 'danger' : 'success'" size="small">
+              {{ item.is_blocked ? $t('home.bulletin_blocked') : $t('home.bulletin_trading') }}
+            </el-tag>
+            <span class="bulletin-next">
+              {{ item.is_blocked
+                ? $t('home.bulletin_next_unblock', { time: item.next_event_time })
+                : $t('home.bulletin_next_block', { time: item.next_event_time }) }}
+            </span>
+            <span class="bulletin-time">{{ item.forbid_start }} ~ {{ item.forbid_end }}</span>
+            <el-tag :type="item.is_cross_day ? 'warning' : 'info'" size="small">
+              {{ item.is_cross_day ? $t('home.bulletin_cross_day') : $t('home.bulletin_same_day') }}
+            </el-tag>
           </div>
         </div>
         <div class="bulletin-section">
@@ -173,7 +183,7 @@ import { i18n } from '@/i18n'
 import { getUserInfo } from '@/api/user'
 import { getMyGroups, getBalance } from '@/api/group'
 import { getUnreadCount } from '@/api/message'
-import { getMarketConfig, getCommissionConfigs, getExchangeRates, getAnnouncement } from '@/api/stock'
+import { getMarketConfig, getCommissionConfigs, getExchangeRates, getAnnouncement, getMarketStatus } from '@/api/stock'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -186,27 +196,11 @@ const unreadCount = ref(0)
 const showPwdDialog = ref(false)
 
 const bulletinData = ref(null)
+const marketStatus = ref([])
 const bulletinAnnouncement = ref('')
 const bulletinRates = ref(null)
-const bulletinForbidden = computed(() => {
-  if (!bulletinData.value) return []
-  const lang = i18n.global.locale.value
-  const marketLabels = { 1: t('market.a_share'), 2: t('market.hk_stock'), 3: t('market.us_stock') }
-  return bulletinData.value.map(c => {
-    const fs = c.forbid_start
-    const fe = c.forbid_end
-    const isCrossDay = fs > fe
-    return {
-      market: marketLabels[c.market_type] || `Market ${c.market_type}`,
-      forbid_start: fs,
-      forbid_end: fe,
-      isCrossDay,
-      typeLabel: isCrossDay ? t('home.bulletin_cross_day') : t('home.bulletin_same_day')
-    }
-  })
-})
 const bulletinCommission = computed(() => {
-  if (!bulletinData.value) return []
+  if (commissionConfigs.value.length === 0) return []
   const marketLabels = { 1: t('market.a_share'), 2: t('market.hk_stock'), 3: t('market.us_stock') }
   return [1, 2, 3].map(mt => {
     const buys = commissionConfigs.value.filter(c => c.market_type === mt && c.trade_type === 1)
@@ -297,13 +291,13 @@ const switchLang = (lang) => {
  */
 const fetchBulletin = async () => {
   try {
-    const [marketRes, commissionRes, ratesRes, annRes] = await Promise.all([
-      getMarketConfig(),
+    const [statusRes, commissionRes, ratesRes, annRes] = await Promise.all([
+      getMarketStatus(),
       getCommissionConfigs(),
       getExchangeRates(),
       getAnnouncement()
     ])
-    bulletinData.value = marketRes.data || []
+    marketStatus.value = statusRes.data || []
     commissionConfigs.value = commissionRes.data || []
     bulletinRates.value = ratesRes.data || null
     const ann = annRes.data
@@ -510,6 +504,10 @@ const handleLogout = () => {
   font-size: 13px;
 }
 
+.bulletin-row.blocked {
+  color: var(--color-down, #f56c6c);
+}
+
 .bulletin-label {
   width: 60px;
   color: var(--color-text-secondary);
@@ -520,6 +518,18 @@ const handleLogout = () => {
   font-family: var(--font-num);
   color: var(--color-text);
   min-width: 120px;
+}
+
+.bulletin-next {
+  font-size: 12px;
+  min-width: 120px;
+}
+
+.bulletin-time {
+  font-family: var(--font-num);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  min-width: 100px;
 }
 
 .unread-badge :deep(.el-badge__content) {

@@ -466,7 +466,11 @@
     "bulletin_commission": "Commission Rates",
     "bulletin_exchange": "Exchange Rates",
     "bulletin_same_day": "Same-day",
-    "bulletin_cross_day": "Cross-day"
+    "bulletin_cross_day": "Cross-day",
+    "bulletin_trading": "Trading",
+    "bulletin_blocked": "Blocked",
+    "bulletin_next_block": "Trading, ends at {time}",
+    "bulletin_next_unblock": "Blocked, ends at {time}"
   },
   "options_page": {
     "title": "Options Trading",

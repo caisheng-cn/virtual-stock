@@ -16,6 +16,38 @@ const { EXCHANGE_RATES } = require('../utils/currency')
 
 const router = express.Router()
 
+const MARKET_LABELS = { 1: 'A股', 2: '港股', 3: '美股' }
+
+function getNextEvent(fs, fe) {
+  const now = new Date()
+  const current = now.toTimeString().slice(0, 5)
+  const isCrossDay = fs > fe
+
+  let isBlocked
+  if (isCrossDay) {
+    isBlocked = current >= fs || current <= fe
+  } else {
+    isBlocked = current >= fs && current <= fe
+  }
+
+  let nextTime, nextType
+  if (isBlocked) {
+    nextTime = fe
+    nextType = 'unblock'
+    if (isCrossDay && current >= fs) {
+      nextTime = '明天 ' + fe
+    }
+  } else {
+    nextTime = fs
+    nextType = 'block_start'
+    if (!isCrossDay && current > fe) {
+      nextTime = '明天 ' + fs
+    }
+  }
+
+  return { isBlocked, isCrossDay, nextTime, nextType }
+}
+
 /**
  * GET /api/v1/stocks
  * List stocks from the stock pool with optional filtering by market_type and keyword search.
@@ -181,6 +213,34 @@ router.get('/announcement', async (req, res) => {
   try {
     const ann = await AdminAnnouncement.findOne({ where: { enabled: 1 }, order: [['id', 'DESC']] })
     res.json({ code: 0, data: ann })
+  } catch (err) {
+    res.json({ code: -1, message: err.message })
+  }
+})
+
+/**
+ * GET /api/v1/stocks/market-status
+ * Get real-time trading status per market (public).
+ * Response: { code, data: Array<{ market_type, market_label, enabled, forbid_start, forbid_end, is_cross_day, is_blocked, next_event_time, next_event_type }> }
+ */
+router.get('/market-status', async (req, res) => {
+  try {
+    const configs = await MarketConfig.findAll()
+    const data = configs.map(c => {
+      const { isBlocked, isCrossDay, nextTime, nextType } = getNextEvent(c.forbid_start, c.forbid_end)
+      return {
+        market_type: c.market_type,
+        market_label: MARKET_LABELS[c.market_type] || `Market ${c.market_type}`,
+        enabled: c.enabled,
+        forbid_start: c.forbid_start,
+        forbid_end: c.forbid_end,
+        is_cross_day: isCrossDay,
+        is_blocked: isBlocked,
+        next_event_time: nextTime,
+        next_event_type: nextType
+      }
+    })
+    res.json({ code: 0, data })
   } catch (err) {
     res.json({ code: -1, message: err.message })
   }

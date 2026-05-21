@@ -464,7 +464,11 @@
     "bulletin_commission": "交易手续费",
     "bulletin_exchange": "汇率",
     "bulletin_same_day": "同日禁止",
-    "bulletin_cross_day": "跨日禁止"
+    "bulletin_cross_day": "跨日禁止",
+    "bulletin_trading": "交易中",
+    "bulletin_blocked": "禁止交易",
+    "bulletin_next_block": "交易中，结束于 {time}",
+    "bulletin_next_unblock": "禁止交易中，结束于 {time}"
   },
   "options_page": {
     "title": "期权交易",

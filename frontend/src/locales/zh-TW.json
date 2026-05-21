@@ -466,7 +466,11 @@
     "bulletin_commission": "交易手續費",
     "bulletin_exchange": "匯率",
     "bulletin_same_day": "同日禁止",
-    "bulletin_cross_day": "跨日禁止"
+    "bulletin_cross_day": "跨日禁止",
+    "bulletin_trading": "交易中",
+    "bulletin_blocked": "禁止交易",
+    "bulletin_next_block": "交易中，結束於 {time}",
+    "bulletin_next_unblock": "禁止交易中，結束於 {time}"
   },
   "options_page": {
     "title": "期權交易",

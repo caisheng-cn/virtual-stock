@@ -1,5 +1,4 @@
 const axios = require('axios')
-const iconv = require('iconv-lite')
 const { spawn } = require('child_process')
 const path = require('path')
 const { StockPool, StockPrice, StockPricesCache, sequelize } = require('../models')
@@ -51,10 +50,6 @@ function runPythonABatch(stocks) {
   return runPythonScript(PYTHON_SCRIPT, { action: 'a_share_batch', stocks })
 }
 
-function runPythonAQuote(symbol) {
-  return runPythonScript(PYTHON_SCRIPT, { action: 'a_share_quote', symbol })
-}
-
 function runPythonAKlineSingle(symbol, startDate, endDate) {
   return runPythonScript(PYTHON_SCRIPT, {
     action: 'a_share',
@@ -64,94 +59,20 @@ function runPythonAKlineSingle(symbol, startDate, endDate) {
   })
 }
 
-async function getAStockQuote(code) {
-  const url = `http://hq.sinajs.cn/list=${getSinaPrefix(code)}${code}`
-  const response = await axios.get(url, {
-    headers: { Referer: SINA_REFERER },
-    responseType: 'arraybuffer',
-    timeout: 8000
-  })
-  const text = iconv.decode(Buffer.from(response.data), 'gbk')
-  const match = text.match(/="([^"]+)"/)
-  if (!match) throw new Error('获取数据失败')
-  const data = match[1].split(',')
-  return {
-    stockCode: code,
-    stockName: data[0],
-    marketType: 1,
-    openPrice: parseFloat(data[1]) || 0,
-    prevClose: parseFloat(data[2]) || 0,
-    price: parseFloat(data[3]) || 0,
-    highPrice: parseFloat(data[4]) || 0,
-    lowPrice: parseFloat(data[5]) || 0,
-    volume: parseInt(data[8]) || 0,
-    amount: parseFloat(data[9]) || 0,
-    tradeDate: data[30] || '',
-    tradeTime: data[31] || ''
-  }
-}
-
-async function fetchAQuoteFromAKShare(code) {
-  const data = await runPythonAQuote(code)
-  if (data.error) throw new Error(data.error)
-  return {
-    stockCode: code,
-    stockName: data.stock_name,
-    marketType: 1,
-    openPrice: data.open_price || 0,
-    prevClose: data.prev_close || 0,
-    price: data.price || 0,
-    highPrice: data.high_price || 0,
-    lowPrice: data.low_price || 0,
-    volume: data.volume || 0,
-    amount: data.amount || 0,
-    tradeDate: new Date().toISOString().split('T')[0],
-    changePercent: data.change_percent || 0
-  }
-}
-
-async function fetchQuoteFromAPI(code, marketType) {
-  if (marketType == 1) {
-    try {
-      return await fetchAQuoteFromAKShare(code)
-    } catch (e) {
-      console.log(`[AKShare] 实时行情失败 ${code}, 降级到Sina:`, e.message)
-      return await getAStockQuote(code)
-    }
-  }
-  throw new Error('API not available')
-}
-
 async function getQuote(code, marketType) {
-  const today = new Date().toISOString().split('T')[0]
-  
   try {
     const cached = await StockPricesCache.findOne({
-      where: { stock_code: code, market_type: marketType }
+      where: { stock_code: code, market_type: marketType },
+      order: [['trade_date', 'DESC']],
+      raw: true
     })
-    
-    if (cached && cached.trade_date === today) {
-      let ohlc = { openPrice: 0, highPrice: 0, lowPrice: 0 }
-      try {
-        const todayRecord = await StockPrice.findOne({
-          where: { stock_code: code, market_type: marketType, trade_date: today }
-        })
-        if (todayRecord) {
-          ohlc = {
-            openPrice: parseFloat(todayRecord.open_price) || 0,
-            highPrice: parseFloat(todayRecord.high_price) || 0,
-            lowPrice: parseFloat(todayRecord.low_price) || 0
-          }
-        }
-      } catch (e) {}
-
+    if (cached && parseFloat(cached.close_price) > 0) {
       return {
         stockCode: cached.stock_code,
         stockName: cached.stock_name || code,
         marketType: cached.market_type,
         prevClose: parseFloat(cached.prev_close) || 0,
         price: parseFloat(cached.close_price) || 0,
-        ...ohlc,
         tradeDate: cached.trade_date,
         fromCache: true
       }
@@ -159,104 +80,47 @@ async function getQuote(code, marketType) {
   } catch (err) {
     console.log('Cache read error:', err.message)
   }
-  
-  try {
-    const quote = await fetchQuoteFromAPI(code, marketType)
-    
-    try {
-      await StockPricesCache.upsert({
-        stock_code: code,
-        market_type: marketType,
-        stock_name: quote.stockName,
-        trade_date: today,
-        close_price: quote.price,
-        prev_close: quote.prevClose,
-        change_percent: quote.prevClose > 0 ? ((quote.price - quote.prevClose) / quote.prevClose * 100) : 0
-      })
-      
-      try {
-        await StockPrice.findOrCreate({
-          where: { stock_code: code, market_type: marketType, trade_date: quote.tradeDate || today },
-          defaults: {
-            stock_code: code,
-            stock_name: quote.stockName,
-            market_type: marketType,
-            trade_date: quote.tradeDate || today,
-            open_price: quote.openPrice,
-            high_price: quote.highPrice,
-            low_price: quote.lowPrice,
-            close_price: quote.price,
-            prev_close: quote.prevClose,
-            volume: quote.volume || 0,
-            amount: quote.amount || 0
-          }
-        })
-      } catch (err) {
-        console.log('History save error:', err.message)
-      }
-    } catch (err) {
-      console.log('Cache save error:', err.message)
-    }
-    
-    return quote
-  } catch (err) {
-    // Fallback: try StockPricesCache
-    try {
-      const cached = await StockPricesCache.findOne({
-        where: { stock_code: code, market_type: marketType }
-      })
-      if (cached) {
-        let ohlc = { openPrice: 0, highPrice: 0, lowPrice: 0 }
-        try {
-          const dayRecord = await StockPrice.findOne({
-            where: { stock_code: code, market_type: marketType, trade_date: cached.trade_date }
-          })
-          if (dayRecord) {
-            ohlc = {
-              openPrice: parseFloat(dayRecord.open_price) || 0,
-              highPrice: parseFloat(dayRecord.high_price) || 0,
-              lowPrice: parseFloat(dayRecord.low_price) || 0
-            }
-          }
-        } catch (e) {}
 
-        return {
-          stockCode: cached.stock_code,
-          stockName: cached.stock_name || code,
-          marketType: cached.market_type,
-          prevClose: parseFloat(cached.prev_close) || 0,
-          price: parseFloat(cached.close_price) || 0,
-          ...ohlc,
-          tradeDate: cached.trade_date,
-          fromCache: true,
-          fallback: true
-        }
+  try {
+    const pool = await StockPool.findOne({
+      where: { stock_code: code, market_type: marketType },
+      raw: true
+    })
+
+    const latest = await StockPrice.findOne({
+      where: { stock_code: code, market_type: marketType },
+      order: [['trade_date', 'DESC']],
+      raw: true
+    })
+
+    if (latest && parseFloat(latest.close_price) > 0) {
+      return {
+        stockCode: code,
+        stockName: (pool && pool.stock_name) || latest.stock_name || code,
+        marketType,
+        prevClose: parseFloat(latest.prev_close) || 0,
+        price: parseFloat(latest.close_price) || 0,
+        openPrice: parseFloat(latest.open_price) || 0,
+        highPrice: parseFloat(latest.high_price) || 0,
+        lowPrice: parseFloat(latest.low_price) || 0,
+        tradeDate: latest.trade_date,
+        fromCache: true
       }
-    } catch (cacheErr) {}
-    // Last resort: get latest from stock_prices
-    try {
-      const latest = await StockPrice.findOne({
-        where: { stock_code: code, market_type: marketType },
-        order: [['trade_date', 'DESC']]
-      })
-      if (latest) {
-        return {
-          stockCode: code,
-          stockName: latest.stock_name || code,
-          marketType: marketType,
-          prevClose: parseFloat(latest.prev_close) || 0,
-          price: parseFloat(latest.close_price) || 0,
-          openPrice: parseFloat(latest.open_price) || 0,
-          highPrice: parseFloat(latest.high_price) || 0,
-          lowPrice: parseFloat(latest.low_price) || 0,
-          tradeDate: latest.trade_date,
-          fromCache: true,
-          fallback: true
-        }
+    }
+
+    if (pool && pool.stock_name) {
+      return {
+        stockCode: code,
+        stockName: pool.stock_name,
+        marketType,
+        price: 0,
+        tradeDate: '',
+        fromCache: true
       }
-    } catch (latestErr) {}
-    throw err
-  }
+    }
+  } catch (err) {}
+
+  throw new Error(`价格数据不可用 ${code}`)
 }
 
 async function getHistory(code, marketType, startDate, endDate) {

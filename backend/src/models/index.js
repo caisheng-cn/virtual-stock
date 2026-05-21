@@ -41,6 +41,7 @@ const User = sequelize.define('User', {
    is_ai: { type: DataTypes.TINYINT, defaultValue: 0 },
    ai_personality: { type: DataTypes.STRING(20), defaultValue: '' },
    ai_config_id: { type: DataTypes.INTEGER, defaultValue: 0 },
+   personality_prompt: { type: DataTypes.TEXT },
    daily_trade_count: { type: DataTypes.INTEGER, defaultValue: 0 },
    daily_trade_date: { type: DataTypes.DATEONLY },
    created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
@@ -173,11 +174,12 @@ const StockPrice = sequelize.define('StockPrice', {
 /**
  * StockPricesCache model — table: stock_prices_cache
  * Caches the most recent day's closing price for each stock to reduce external API calls.
- * Fields: id, stock_code, market_type, trade_date, close_price, prev_close, change_percent, updated_at
+ * Fields: id, stock_code, stock_name, market_type, trade_date, close_price, prev_close, change_percent, updated_at
  */
 const StockPricesCache = sequelize.define('StockPricesCache', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   stock_code: { type: DataTypes.STRING(20), allowNull: false },
+  stock_name: { type: DataTypes.STRING(50) },
   market_type: { type: DataTypes.TINYINT, allowNull: false },
   trade_date: { type: DataTypes.DATEONLY, allowNull: false },
   close_price: { type: DataTypes.DECIMAL(15, 4) },
@@ -467,6 +469,7 @@ const AiLlmConfig = sequelize.define('AiLlmConfig', {
   model_name: { type: DataTypes.STRING(100), defaultValue: 'gpt-3.5-turbo' },
   max_tokens: { type: DataTypes.INTEGER, defaultValue: 2000 },
   temperature: { type: DataTypes.DECIMAL(3, 2), defaultValue: 0.7 },
+  timeout: { type: DataTypes.INTEGER, defaultValue: 30 },
   personality_prompts: { type: DataTypes.TEXT },
   status: { type: DataTypes.TINYINT, defaultValue: 1 },
   created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },

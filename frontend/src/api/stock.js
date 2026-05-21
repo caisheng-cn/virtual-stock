@@ -55,3 +55,5 @@ export const getMarketConfig = () => request.get('/stocks/market-config')
 export const getExchangeRates = () => request.get('/stocks/exchange-rates')
 
 export const getAnnouncement = () => request.get('/stocks/announcement')
+
+export const getMarketStatus = () => request.get('/stocks/market-status')
